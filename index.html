@@ -1,0 +1,2596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPP LMP Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0d0f14;--surface:#161920;--surface2:#1c2028;--border:#252b38;
+    --accent:#e2e8f0;--orange:#ff7043;--green:#69f0ae;
+    --text:#dde3ed;--muted:#7a8499;--positive:#69f0ae;--negative:#ff5252;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:15px;min-height:100vh;overflow-x:hidden}
+
+  header{border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:rgba(13,15,20,.98);backdrop-filter:blur(10px);z-index:50}
+  .logo{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:1.1rem;letter-spacing:.06em;color:var(--accent)}
+  .logo span{color:var(--text);opacity:.7}
+  .status-pill{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;letter-spacing:.06em}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0}
+  .dot.live{background:var(--positive);animation:pulse 2s infinite}
+  .dot.loading{background:var(--accent);animation:blink .7s infinite}
+  .dot.error{background:var(--negative)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(105,240,174,.5)}70%{box-shadow:0 0 0 7px rgba(105,240,174,0)}}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  main{padding:20px}
+
+  /* Tabs */
+  .tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:20px;gap:4px}
+  .tab{font-family:'IBM Plex Mono',monospace;font-size:.8rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:10px 18px;cursor:pointer;color:var(--muted);border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;transition:all .15s;border-radius:4px 4px 0 0}
+  .tab.active{color:var(--accent);border-bottom-color:var(--positive);background:rgba(105,240,174,.05)}
+  .tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.03)}
+
+  /* Buttons */
+  .controls{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:.8rem;font-weight:600;padding:10px 18px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;letter-spacing:.04em;transition:all .15s;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--positive);color:#0d0f14;border-color:var(--positive)}
+  .btn.primary:hover{background:#4ddb96}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn.auto-on{border-color:var(--positive);color:var(--positive)}
+
+  /* Filters */
+  .filter-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+  input[type=text]{font-family:'IBM Plex Sans',sans-serif;font-size:.88rem;padding:9px 14px;background:var(--surface);border:1.5px solid var(--border);color:var(--text);border-radius:6px;width:260px;outline:none;transition:border-color .15s}
+  input[type=text]:focus{border-color:var(--accent)}
+  input[type=text]::placeholder{color:var(--muted)}
+  select{font-family:'IBM Plex Sans',sans-serif;font-size:.85rem;padding:9px 13px;background:var(--surface);border:1.5px solid var(--border);color:var(--text);border-radius:6px;outline:none;cursor:pointer}
+  .row-count{font-size:.82rem;color:var(--muted);margin-left:auto;font-family:'IBM Plex Mono',monospace}
+
+  /* Stat cards */
+  .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+  .stat-card{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden}
+  .stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--positive);border-radius:8px 8px 0 0}
+  .stat-card.warn::after{background:var(--negative)}
+  .stat-card.good::after{background:var(--positive)}
+  .stat-label{font-size:.72rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px;font-family:'IBM Plex Mono',monospace}
+  .stat-value{font-size:1.6rem;font-weight:700;color:var(--positive);line-height:1;font-family:'IBM Plex Mono',monospace}
+  .stat-card.warn .stat-value{color:var(--negative)}
+  .stat-card.good .stat-value{color:var(--positive)}
+  .stat-sub{font-size:.75rem;color:var(--muted);margin-top:5px}
+
+  /* Timestamp */
+  .ts{font-size:.8rem;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;line-height:1.6}
+  .badge{display:inline-block;background:rgba(105,240,174,.1);border:1px solid rgba(105,240,174,.25);color:var(--positive);font-size:.72rem;padding:3px 9px;border-radius:20px;font-family:'IBM Plex Mono',monospace;font-weight:600}
+
+  /* Table */
+  .table-wrap{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;overflow:auto;max-height:520px}
+  table{width:100%;border-collapse:collapse}
+  thead{position:sticky;top:0;background:#10131a;z-index:10}
+  th{padding:11px 14px;text-align:left;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1.5px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;font-family:'IBM Plex Mono',monospace}
+  th:hover{color:var(--accent)}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:.88rem;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(105,240,174,.03)}
+  .lp{font-weight:700;font-family:'IBM Plex Mono',monospace;font-size:.92rem}
+  .c-pos{color:var(--positive)}.c-neg{color:var(--negative)}.c-high{color:var(--negative)}.c-zero{color:var(--muted)}
+  .comp{color:var(--muted);font-size:.82rem;font-family:'IBM Plex Mono',monospace}
+  .pnode-cell{color:var(--muted);font-size:.78rem;font-family:'IBM Plex Mono',monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+  .sl-cell{font-weight:600;font-size:.88rem}
+
+  /* Loading */
+  .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:260px;gap:14px;color:var(--muted);font-size:.88rem;letter-spacing:.05em;font-family:'IBM Plex Mono',monospace}
+  .spinner{width:34px;height:34px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  .proxy-label{font-size:.75rem;color:var(--muted);text-align:center}
+  .proxy-label em{color:var(--positive);font-style:normal}
+  .pip-row{display:flex;gap:7px;margin-top:4px}
+  .pip{width:9px;height:9px;border-radius:50%;background:var(--border);transition:background .3s}
+  .pip.trying{background:var(--positive);animation:blink .6s infinite}
+  .pip.ok{background:var(--positive)}
+  .pip.fail{background:var(--negative)}
+
+  /* Debug log */
+  .debug-log{background:#0a0c10;border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;font-size:.72rem;max-height:160px;overflow-y:auto;display:none}
+  .debug-log.visible{display:block}
+  .dl-row{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.5}
+  .dl-ok{color:var(--positive)}.dl-fail{color:var(--negative)}.dl-warn{color:var(--orange)}.dl-info{color:var(--muted)}
+
+  /* Upload zone */
+  .upload-zone{margin-top:0;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:20px}
+  .upload-zone h2{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:6px}
+  .upload-zone p{font-size:.85rem;color:var(--muted);line-height:1.7;margin-bottom:14px}
+  .upload-zone .step{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:.85rem;color:var(--muted);line-height:1.6}
+  .step-num{background:rgba(105,240,174,.12);color:var(--positive);font-weight:700;font-size:.75rem;padding:2px 8px;border-radius:4px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;margin-top:1px}
+  .step code{font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--positive);background:rgba(105,240,174,.07);padding:1px 6px;border-radius:3px;word-break:break-all}
+  .dropbox{border:2px dashed var(--border);border-radius:8px;padding:28px 20px;text-align:center;color:var(--muted);font-size:.88rem;transition:border-color .2s,background .2s;margin-top:16px}
+  .dropbox:hover{border-color:var(--positive);background:rgba(105,240,174,.03)}
+  .dropbox .drop-icon{font-size:2rem;margin-bottom:10px}
+  .dropbox .drop-text{margin-bottom:14px;line-height:1.5}
+  .dropbox .drop-text strong{color:var(--text)}
+
+  /* Node comparison modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+  .modal-overlay.hidden{display:none}
+  .modal{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;padding:24px;position:relative}
+  .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1;padding:4px 8px;border-radius:4px}
+  .modal-close:hover{color:var(--text);background:rgba(255,255,255,.07)}
+  .modal-title{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:1rem;color:var(--positive);margin-bottom:4px;padding-right:32px}
+  .modal-sub{font-size:.78rem;color:var(--muted);margin-bottom:20px;font-family:'IBM Plex Mono',monospace}
+  .modal-kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px}
+  .modal-kpi{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-align:center}
+  .modal-kpi-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:'IBM Plex Mono',monospace;margin-bottom:5px}
+  .modal-kpi-val{font-size:1.25rem;font-weight:700;font-family:'IBM Plex Mono',monospace}
+  .kv-rt{color:var(--positive)}
+  .kv-da{color:var(--positive)}
+  .kv-spread-pos{color:var(--negative)}
+  .kv-spread-neg{color:var(--positive)}
+  .chart-wrap{position:relative;height:240px;margin-bottom:8px}
+  .chart-legend{display:flex;gap:18px;justify-content:center;font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:16px}
+  .legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .da-loading{text-align:center;color:var(--muted);font-size:.8rem;font-family:'IBM Plex Mono',monospace;padding:40px 0}
+  /* Clickable rows */
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover td{background:rgba(105,240,174,.06)!important}
+  .da-badge{display:inline-block;font-size:.68rem;font-family:'IBM Plex Mono',monospace;background:rgba(105,240,174,.1);color:var(--positive);border:1px solid rgba(105,240,174,.2);padding:1px 6px;border-radius:3px;margin-left:6px;vertical-align:middle}
+  .da-status-bar{background:rgba(105,240,174,.06);border:1px solid rgba(105,240,174,.15);border-radius:6px;padding:8px 14px;margin-bottom:14px;font-size:.75rem;color:var(--positive);font-family:'IBM Plex Mono',monospace;display:none}
+
+  /* Alert banner */
+  .alert-banner{display:none;position:sticky;top:57px;z-index:40;background:#1a0a00;border-bottom:2px solid var(--orange);padding:10px 20px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:var(--orange);animation:alertPulse 1s ease-in-out 3}
+  .alert-banner.visible{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  @keyframes alertPulse{0%,100%{background:#1a0a00}50%{background:#2a1200}}
+  .alert-dismiss{margin-left:auto;cursor:pointer;opacity:.6;font-size:1rem;padding:0 4px}
+  .alert-dismiss:hover{opacity:1}
+
+  /* Alert config panel */
+  .alert-config{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;display:none}
+  .alert-config.visible{display:block}
+  .alert-config-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .alert-config label{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;white-space:nowrap}
+  .alert-config input[type=number]{width:90px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;padding:7px 10px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);border-radius:6px;outline:none}
+  .alert-config input[type=number]:focus{border-color:var(--accent)}
+  .alert-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:5px}
+  .alert-dot.on{background:var(--orange);animation:pulse 2s infinite}
+
+  /* MCC bar in table */
+  .mcc-bar-wrap{display:flex;align-items:center;gap:6px}
+  .mcc-bar{height:6px;border-radius:3px;min-width:2px;flex-shrink:0}
+  .mcc-pos{background:var(--positive)}
+  .mcc-neg{background:var(--negative)}
+  .mcc-val{font-family:'IBM Plex Mono',monospace;font-size:.82rem}
+
+  /* Leaderboard tab */
+  .leader-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px}
+  @media(max-width:600px){.leader-grid{grid-template-columns:1fr}}
+  .leader-panel{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+  .leader-panel-hdr{padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .lhdr-neg{color:var(--negative);background:rgba(255,82,82,.05)}
+  .lhdr-pos{color:var(--negative);background:rgba(255,82,82,.05)}
+  .lhdr-spread{color:var(--orange);background:rgba(255,112,67,.05)}
+  .lhdr-persist{color:#b39ddb;background:rgba(179,157,219,.05)}
+  .leader-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.82rem;cursor:pointer;transition:background .1s}
+  .leader-row:last-child{border-bottom:none}
+  .leader-row:hover{background:rgba(255,255,255,.03)}
+  .leader-rank{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--muted);width:18px;flex-shrink:0}
+  .leader-name{flex:1;font-weight:600;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .leader-val{font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:700;flex-shrink:0}
+  .leader-sub{font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;flex-shrink:0}
+  .persist-bar{height:5px;border-radius:3px;background:rgba(179,157,219,.3);margin-top:3px;position:relative}
+  .persist-fill{height:100%;border-radius:3px;background:#b39ddb;position:absolute;top:0;left:0}
+  .leader-empty{padding:20px;text-align:center;color:var(--muted);font-size:.8rem;font-family:'IBM Plex Mono',monospace}
+
+  /* Watch/pin system */
+  .star-btn{background:none;border:none;cursor:pointer;font-size:.95rem;padding:0 4px;line-height:1;color:var(--muted);transition:color .15s;flex-shrink:0}
+  .star-btn:hover{color:#ffd54f}
+  .star-btn.watched{color:#ffd54f}
+  tr.watched-row td{background:rgba(255,213,79,.04)!important}
+  tr.watched-row:hover td{background:rgba(255,213,79,.09)!important}
+
+  /* Watch panel */
+  .watch-panel{background:var(--surface);border:1.5px solid #ffd54f44;border-radius:8px;margin-bottom:14px;overflow:hidden;display:none}
+  .watch-panel.visible{display:block}
+  .watch-panel-hdr{padding:9px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);background:rgba(255,213,79,.05)}
+  .watch-panel-title{font-family:'IBM Plex Mono',monospace;font-size:.75rem;font-weight:700;letter-spacing:.06em;color:#ffd54f;flex:1}
+  .watch-panel-actions{display:flex;gap:8px}
+  .watch-rows{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px}
+  .watch-card{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;min-width:160px;cursor:default;position:relative}
+  .watch-card-name{font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:700;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;padding-right:16px}
+  .watch-card-lmp{font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:700;line-height:1}
+  .watch-card-spread{font-size:.68rem;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin-top:3px}
+  .watch-card-alert{font-size:.65rem;font-family:'IBM Plex Mono',monospace;font-weight:700;margin-top:3px;display:none}
+  .watch-card-alert.firing{display:block;color:var(--negative)}
+  .watch-card-remove{position:absolute;top:5px;right:6px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:1px 4px;border-radius:3px;line-height:1}
+  .watch-card-remove:hover{color:var(--negative);background:rgba(255,82,82,.1)}
+
+  /* Watch alert config row */
+  .watch-alert-row{padding:8px 14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(0,0,0,.15)}
+  .watch-alert-row label{font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .watch-alert-row input{width:80px;font-family:'IBM Plex Mono',monospace;font-size:.82rem;padding:5px 8px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);border-radius:5px;outline:none}
+  .watch-alert-row input:focus{border-color:#ffd54f}
+
+  /* Column filter row in table */
+  .col-filter-row th{padding:3px 4px!important;position:relative}
+  .col-filter-btn{width:100%;font-family:'IBM Plex Mono',monospace;font-size:.7rem;padding:4px 22px 4px 7px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;outline:none;box-sizing:border-box;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;transition:border-color .15s,color .15s}
+  .col-filter-btn:hover{border-color:var(--positive);color:var(--text)}
+  .col-filter-btn.active{border-color:var(--positive);color:var(--positive);background:rgba(105,240,174,.07)}
+  .col-filter-btn::after{content:'▾';position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.7rem;opacity:.6}
+  /* Dropdown panel */
+  .cf-dropdown{min-width:220px;max-width:300px;max-height:320px;background:var(--surface);border:1.5px solid var(--border);border-radius:6px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
+  .cf-search{width:100%;box-sizing:border-box;padding:7px 10px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;background:var(--surface2);border:none;border-bottom:1px solid var(--border);color:var(--text);outline:none;flex-shrink:0}
+  .cf-search::placeholder{color:var(--muted)}
+  .cf-list{overflow-y:auto;flex:1}
+  .cf-item{padding:6px 12px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .cf-item:hover{background:rgba(105,240,174,.08);color:var(--positive)}
+  .cf-item.selected{color:var(--positive);background:rgba(105,240,174,.06)}
+  .cf-item-check{width:12px;height:12px;border:1px solid var(--border);border-radius:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem}
+  .cf-item.selected .cf-item-check{background:var(--positive);border-color:var(--positive);color:#000}
+  .cf-divider{border:none;border-top:1px solid var(--border);margin:2px 0}
+  .cf-clear{padding:7px 12px;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--negative);cursor:pointer;border-top:1.5px solid var(--border);flex-shrink:0;background:var(--surface)}
+  .cf-clear:hover{background:rgba(255,82,82,.08)}
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+  th.sortable:hover{color:var(--positive)}
+  th.sort-active{color:var(--positive)!important}
+  .sort-arrow{font-size:.65rem;margin-left:3px;opacity:.7}
+
+  /* Compare modal */
+  .compare-modal{max-width:820px!important}
+  .compare-chart-wrap{position:relative;height:300px;margin-bottom:8px}
+  .compare-legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:16px}
+  .compare-kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px}
+
+  /* Export selected button */
+  .btn.watch-export{border-color:#ffd54f44;color:#ffd54f;display:none}
+  .btn.watch-export.visible{display:inline-flex;align-items:center;gap:5px}
+
+  .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px}
+  .analytics-full{grid-column:1/-1}
+  @media(max-width:700px){.analytics-grid{grid-template-columns:1fr}}
+  .analytics-panel{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+  .analytics-hdr{padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .ahdr-price{color:var(--positive);background:rgba(105,240,174,.05)}
+  .ahdr-mcc{color:var(--negative);background:rgba(255,82,82,.05)}
+  .ahdr-paths{color:#ffd54f;background:rgba(255,213,79,.05)}
+  .heatmap-wrap{overflow-x:auto;padding:12px 14px}
+  .hm-table{border-collapse:collapse;width:100%;font-size:.75rem;font-family:'IBM Plex Mono',monospace}
+  .hm-table th{padding:5px 8px;text-align:center;color:var(--muted);font-size:.67rem;letter-spacing:.05em;white-space:nowrap;font-weight:600}
+  .hm-table th.row-hdr{text-align:left;color:var(--text);font-size:.72rem;min-width:52px}
+  .hm-table td{padding:6px 8px;text-align:center;border-radius:4px;cursor:default;font-size:.72rem;font-weight:700;transition:opacity .15s;min-width:46px}
+  .hm-table td:hover{opacity:.75;outline:1px solid rgba(255,255,255,.3)}
+  .hm-zone-label{font-weight:700;color:var(--text);font-size:.72rem;text-align:left;padding:6px 10px 6px 4px;white-space:nowrap}
+  .hm-note{font-size:.72rem;color:var(--muted);padding:8px 14px 12px;font-family:'IBM Plex Mono',monospace;line-height:1.6}
+  /* Constrained paths panel */
+  .path-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.82rem}
+  .path-row:last-child{border-bottom:none}
+  .path-rank{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--muted);width:18px;flex-shrink:0}
+  .path-label{flex:1;font-weight:700;font-size:.82rem;letter-spacing:.02em}
+  .path-arrow{color:var(--muted);font-size:.9rem;margin:0 2px}
+  .path-from{color:var(--negative)}
+  .path-to{color:var(--positive)}
+  .path-wedge{font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:700;flex-shrink:0}
+  .path-detail{font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;flex-shrink:0}
+  .path-bar-wrap{width:80px;flex-shrink:0}
+  .path-bar-bg{height:5px;background:rgba(255,255,255,.08);border-radius:3px;position:relative}
+  .path-bar-fill{height:100%;border-radius:3px;position:absolute;top:0;left:0;background:linear-gradient(90deg,var(--negative),#ff8a80)}
+  .path-severity{font-size:.65rem;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin-top:3px}
+  .path-empty{padding:20px;text-align:center;color:var(--muted);font-size:.8rem;font-family:'IBM Plex Mono',monospace}
+  .severity-high{color:var(--negative)}
+  .severity-med{color:var(--orange)}
+  .severity-low{color:var(--muted)}
+  .hm-legend{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-top:1px solid var(--border)}
+  .hm-legend-bar{width:80px;height:8px;border-radius:3px}
+
+  /* Session tab */
+  .session-grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:4px}
+  .session-panel{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+  .session-hdr{padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+  .shdr-signal{color:#ffd54f;background:rgba(255,213,79,.05)}
+  .shdr-trend{color:var(--positive);background:rgba(105,240,174,.05)}
+  .shdr-watched{color:#ce93d8;background:rgba(206,147,216,.05)}
+  .session-chart-wrap{position:relative;padding:14px;height:260px}
+  .session-chart-wrap.tall{height:300px}
+  /* Signal card */
+  .signal-feed{max-height:420px;overflow-y:auto}
+  .signal-item{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start}
+  .signal-item:last-child{border-bottom:none}
+  .signal-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+  .signal-body{flex:1;min-width:0}
+  .signal-time{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted);margin-bottom:3px}
+  .signal-headline{font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:3px;line-height:1.4}
+  .signal-detail{font-size:.75rem;color:var(--muted);line-height:1.5;font-family:'IBM Plex Mono',monospace}
+  .signal-sev-high{border-left:3px solid var(--negative)}
+  .signal-sev-med{border-left:3px solid var(--orange)}
+  .signal-sev-low{border-left:3px solid var(--muted)}
+  .signal-sev-watch{border-left:3px solid #ffd54f}
+  .signal-empty{padding:32px;text-align:center;color:var(--muted);font-size:.82rem;font-family:'IBM Plex Mono',monospace;line-height:1.8}
+  /* Session stats bar */
+  .session-stats{display:flex;gap:20px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .session-stat{font-family:'IBM Plex Mono',monospace;font-size:.72rem}
+  .session-stat-label{color:var(--muted);letter-spacing:.05em}
+  .session-stat-val{color:var(--text);font-weight:700;margin-left:5px}
+  /* Export session button */
+  .session-export-row{padding:8px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.1)}
+  /* Zone toggle chips */
+  .zone-chips{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border)}
+  .zone-chip{font-family:'IBM Plex Mono',monospace;font-size:.65rem;font-weight:700;padding:3px 9px;border-radius:12px;border:1px solid var(--border);cursor:pointer;transition:all .15s;background:none;color:var(--muted)}
+  .zone-chip.on{border-color:var(--positive);color:var(--positive);background:rgba(105,240,174,.08)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SPP<span> // LMP</span></div>
+  <div class="status-pill"><div class="dot" id="dot"></div><span id="stxt">READY</span></div>
+</header>
+<div class="alert-banner" id="alertBanner">
+  <span id="alertBannerText">⚡ Price Alert</span>
+  <span class="alert-dismiss" onclick="dismissAlert()">✕</span>
+</div>
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('rtbm',this)">RTBM Real-Time</button>
+    <button class="tab" onclick="switchTab('da',this)">Day-Ahead</button>
+    <button class="tab" onclick="switchTab('leader',this)">⚡ Congestion</button>
+    <button class="tab" onclick="switchTab('analytics',this)">📊 Analytics</button>
+    <button class="tab" onclick="switchTab('session',this)">📈 Session</button>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="fetchBtn" onclick="fetchData()">⟳ Fetch Latest</button>
+    <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto-Refresh: Off</button>
+    <button class="btn" id="alertBtn" onclick="toggleAlertConfig()"><span class="alert-dot" id="alertDot"></span>Alerts</button>
+    <button class="btn watch-export" id="exportSelectedBtn" onclick="downloadSelectedCSV()">↓ Export Selected</button>
+    <button class="btn" onclick="downloadCSV()" style="margin-left:auto">↓ Export CSV</button>
+    <button class="btn" id="debugBtn" onclick="toggleDebug()" style="font-size:.65rem">🔍 Debug</button>
+  </div>
+  <div class="alert-config" id="alertConfig">
+    <div class="alert-config-row">
+      <label>HIGH ALERT ($/MWh):</label>
+      <input type="number" id="alertHigh" placeholder="e.g. 100" value="">
+      <label style="margin-left:10px">LOW ALERT ($/MWh):</label>
+      <input type="number" id="alertLow" placeholder="e.g. -10" value="">
+      <button class="btn" style="padding:7px 14px;font-size:.75rem" onclick="saveAlerts()">Set Alerts</button>
+      <button class="btn" style="padding:7px 14px;font-size:.75rem" onclick="clearAlerts()">Clear</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace" id="alertStatus">No alerts set. Enter thresholds above and click Set Alerts.</div>
+  </div>
+  <!-- Watch Panel -->
+  <div class="watch-panel" id="watchPanel">
+    <div class="watch-panel-hdr">
+      <span class="watch-panel-title">★ WATCHED LOCATIONS</span>
+      <div class="watch-panel-actions">
+        <button class="btn" style="padding:5px 12px;font-size:.72rem;border-color:#ffd54f44;color:#ffd54f" onclick="openCompareModal()" id="compareBtn">Compare</button>
+        <button class="btn" style="padding:5px 12px;font-size:.72rem" onclick="clearWatched()">Clear All</button>
+      </div>
+    </div>
+    <div class="watch-rows" id="watchRows"></div>
+    <div class="watch-alert-row">
+      <label>RT−DA SPREAD ALERT ($/MWh, watched locations only):</label>
+      <input type="number" id="spreadAlertInput" placeholder="e.g. 30" value="">
+      <button class="btn" style="padding:5px 12px;font-size:.72rem" onclick="saveSpreadAlert()">Set</button>
+      <button class="btn" style="padding:5px 12px;font-size:.72rem" onclick="clearSpreadAlert()">Clear</button>
+      <span id="spreadAlertStatus" style="font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace"></span>
+    </div>
+  </div>
+
+  <div class="filter-row" id="filterRow" style="display:none">
+    <input type="text" id="search" placeholder="Search settlement location or pnode…" oninput="renderTable()">
+    <select id="zoneSel" onchange="renderTable()">
+      <option value="all">All Zones</option>
+    </select>
+    <select id="filt" onchange="renderTable()">
+      <option value="all">All Prices</option>
+      <option value="high">High (&gt;$50)</option>
+      <option value="neg">Negative</option>
+      <option value="low">Low (&lt;$20)</option>
+      <option value="watched">★ Watched</option>
+    </select>
+    <span class="row-count" id="rowCount"></span>
+  </div>
+  <div id="debugLog" class="debug-log"></div>
+  <div class="da-status-bar" id="daStatusBar"></div>
+  <div id="statsRow" class="stats-row"></div>
+  <div id="ts" class="ts"></div>
+  <div id="content"></div>
+</main>
+
+<!-- Compare Modal -->
+<div class="modal-overlay hidden" id="compareOverlay" onclick="if(event.target===this)closeCompareModal()">
+  <div class="modal compare-modal">
+    <button class="modal-close" onclick="closeCompareModal()">✕</button>
+    <div class="modal-title" id="compareTitle">Compare Locations</div>
+    <div class="modal-sub" id="compareSub"></div>
+    <div class="compare-kpi-grid" id="compareKpiGrid"></div>
+    <div class="compare-legend" id="compareLegend"></div>
+    <div class="compare-chart-wrap"><canvas id="compareChart"></canvas></div>
+  </div>
+</div>
+
+<script>
+let allData=[], rtbmData=[], tab='rtbm', autoTimer=null, autoOn=false;
+// Alert state
+let alertHigh=null, alertLow=null, alertActive=false;
+// Watch list: Set of watched settlement location strings
+let watchedSls = new Set();
+// Spread alert threshold (RT−DA, only fires for watched locations)
+let spreadAlertThreshold = null;
+// Column header sort state
+let sortCol = 'lmp_d', sortDir = 1; // 1=desc, -1=asc per col default
+// Column filter state
+let colFilters = { sl: new Set(), lmp: '', mec: '', mcc: '', mlc: '' };
+// MCC persistence tracker: { sl: count_of_consecutive_congested_intervals }
+let mccPersist={};
+// Session history
+let sessionSnapshots = [];    // [{interval,ts,avgLmp,maxLmp,minLmp,negCount,zoneAvgs,topConstrained}]
+let watchHistory = {};        // {sl: [{interval,ts,lmp,mcc,spread}]}
+let sessionHigh = null;       // {lmp,sl,interval}
+let sessionLow  = null;       // {lmp,sl,interval}
+let prevConstrainedPaths = []; // path keys from last interval for emergence/resolution detection
+let sessionStories = [];      // [{ts,interval,icon,headline,detail,severity}]
+// Audio context for chime
+let audioCtx=null;
+const BASE='https://portal.spp.org/file-browser-api/download';
+
+// Global color function — used by table, modal KPI cards, and analytics tab
+function lmpColor(v){
+  if(v===0) return 'var(--muted)';
+  if(v>0){
+    const t = Math.min(1, v/100);
+    const r = Math.round(168 - t*63);
+    const g = 240;
+    const b = Math.round(198 - t*24);
+    return 'rgb('+r+','+g+','+b+')';
+  } else {
+    const t = Math.min(1, Math.abs(v)/50);
+    const r = 255;
+    const g = Math.round(158 - t*126);
+    const b = Math.round(158 - t*126);
+    return 'rgb('+r+','+g+','+b+')';
+  }
+}
+
+// Cache-busting strategy: vary the target URL so corsproxy.io sees a unique URL each call
+// SPP's file-browser-api ignores unknown query params, so &_cb=random is harmless
+const CF_WORKER = 'https://spp-proxy.tymckinney2222.workers.dev';
+
+function bustUrl(u){ return u + (u.includes('?') ? '&' : '?') + '_cb=' + Date.now() + Math.random().toString(36).slice(2); }
+
+const PROXIES=[
+  u=>`${CF_WORKER}?url=${encodeURIComponent(u)}&_=${Date.now()}`,
+  u=>`https://corsproxy.io/?url=${encodeURIComponent(bustUrl(u))}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(bustUrl(u))}`,
+  u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(bustUrl(u))}`,
+];
+const PROXY_NAMES=['CF-Worker','corsproxy.io','allorigins.win','codetabs.com'];
+
+function fetchWithTimeout(url,ms){
+  return new Promise((res,rej)=>{
+    const t=setTimeout(()=>rej(new Error('timeout')),ms);
+    fetch(url,{cache:'no-store'}).then(r=>{clearTimeout(t);res(r);}).catch(e=>{clearTimeout(t);rej(e);});
+  });
+
+}
+
+// Track which proxy succeeded last time — start with a different one next fetch
+let lastGoodProxy = 0;
+
+async function proxyFetch(targetUrl){
+  // Rotate starting proxy each call so we never reuse the same cached response
+  const ts = Date.now();
+  // Try proxies starting from a rotating index
+  const order = Array.from({length:PROXIES.length},(_,i)=>(lastGoodProxy+1+i)%PROXIES.length);
+  for(const i of order){
+    pip(i,'trying'); lbl(i);
+    // Each proxy gets a unique timestamp so it can't match any previous cache entry
+    const proxyUrl = PROXIES[i](targetUrl) + '&_=' + ts + i;
+    try{
+      const r=await fetchWithTimeout(proxyUrl, 12000);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const t=await r.text();
+      if(!t||t.trim().startsWith('<!')) throw new Error('got HTML');
+      pip(i,'ok');
+      lastGoodProxy = i; // remember which proxy worked
+      return t;
+    }catch(e){ pip(i,'fail'); console.warn(PROXY_NAMES[i]+' failed:',e.message); }
+  }
+  throw new Error('All proxies blocked');
+}
+function pip(i,cls){ const e=document.getElementById('pip'+i); if(e) e.className='pip '+cls; }
+function updateLoadingMsg(msg){ const e=document.querySelector('.loading-msg'); if(e) e.textContent=msg; }
+function lbl(i){ const e=document.querySelector('.proxy-label em'); if(e) e.textContent=PROXY_NAMES[i]; }
+
+// daAllData mirrors allData but for the DA tab — stored separately so switching tabs works
+let daTabData = [];
+
+function switchTab(t,el){
+  tab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  setStatus('','READY');
+
+  if(t === 'rtbm'){
+    allData = rtbmData;
+    if(allData.length){ renderTableFull(); }
+    else { showUploadUI(); }
+  } else if(t === 'da'){
+    allData = daTabData;
+    if(allData.length){ renderTableFull(); }
+    else if(daLoadedDate){ showDaReadyUI(); }
+    else { showUploadUI(); }
+  } else if(t === 'leader'){
+    allData = [];
+    ['statsRow','ts','rowCount'].forEach(id=>{ document.getElementById(id).innerHTML=''; });
+    document.getElementById('filterRow').style.display='none';
+    renderLeaderboard();
+  } else if(t === 'analytics'){
+    allData = [];
+    ['statsRow','ts','rowCount'].forEach(id=>{ document.getElementById(id).innerHTML=''; });
+    document.getElementById('filterRow').style.display='none';
+    renderAnalytics();
+  } else if(t === 'session'){
+    allData = [];
+    ['statsRow','ts','rowCount'].forEach(id=>{ document.getElementById(id).innerHTML=''; });
+    document.getElementById('filterRow').style.display='none';
+    renderSession();
+  }
+}
+
+function renderTableFull(){
+  const lmps = allData.map(r=>r.lmp);
+  const avg = lmps.reduce((a,b)=>a+b,0)/lmps.length;
+  const max = Math.max(...lmps), min = Math.min(...lmps), neg = lmps.filter(v=>v<0).length;
+  const ivRaw = allData[0]?.interval||'—';
+  const ivLabel = ivRaw.includes('T')||ivRaw.includes('UTC') ? ivRaw+' GMT' : ivRaw+' CT';
+  const label = tab==='rtbm' ? 'RTBM Real-Time (5-min)' : 'Day-Ahead Market';
+  document.getElementById('ts').innerHTML=
+    `<span class="badge">${label}</span>&nbsp;&nbsp;Interval: ${ivLabel}&nbsp;&nbsp;|&nbsp;&nbsp;${allData.length} nodes&nbsp;&nbsp;|&nbsp;&nbsp;Fetched: ${new Date().toLocaleTimeString()}`;
+  document.getElementById('statsRow').innerHTML=`
+    <div class="stat-card"><div class="stat-label">Avg LMP</div><div class="stat-value">$${avg.toFixed(2)}</div><div class="stat-sub">System average</div></div>
+    <div class="stat-card ${max>100?'warn':''}"><div class="stat-label">Max LMP</div><div class="stat-value" style="color:${max>100?'var(--negative)':'var(--positive)'}">$${max.toFixed(2)}</div><div class="stat-sub">Highest node</div></div>
+    <div class="stat-card ${min<0?'warn':'good'}"><div class="stat-label">Min LMP</div><div class="stat-value" style="color:${min<0?'var(--negative)':'var(--positive)'}">$${min.toFixed(2)}</div><div class="stat-sub">Lowest node</div></div>
+    <div class="stat-card ${neg>0?'warn':'good'}"><div class="stat-label">Neg Nodes</div><div class="stat-value" style="color:${neg>0?'var(--orange)':'var(--green)'}">${neg}</div><div class="stat-sub">Below $0/MWh</div></div>
+    <div class="stat-card"><div class="stat-label">Total Nodes</div><div class="stat-value">${allData.length}</div><div class="stat-sub">Settlement locs</div></div>`;
+  document.getElementById('filterRow').style.display='flex';
+  populateZoneDropdown();
+  setStatus('live','LIVE');
+  renderTableShell(); // always full rebuild on new data load
+}
+
+function showDaReadyUI(){
+  ['statsRow','ts','rowCount'].forEach(id=>{ document.getElementById(id).innerHTML=''; });
+  document.getElementById('filterRow').style.display='none';
+  document.getElementById('content').innerHTML=`
+    <div class="upload-zone">
+      <h2>✓ DA Data Ready</h2>
+      <p>DA LMP hourly data for today is loaded. Hit <strong>Fetch Latest</strong> to load the full DA price table, or switch to RTBM and click any row to see the RT vs DA chart.</p>
+    </div>`;
+}
+
+// Single fetch button — fires RTBM + DA in parallel always
+async function fetchData(){
+  const btn=document.getElementById('fetchBtn');
+  btn.disabled=true; btn.textContent='⟳ Fetching…'; setStatus('loading','FETCHING');
+  showLoading();
+  try{
+    // Always fetch both RTBM and DA in parallel on a single click
+    const [rtbmResult, daResult] = await Promise.allSettled([
+      fetchRTBM(),
+      ensureDaLoaded()
+    ]);
+    if(rtbmResult.status==='rejected' && tab==='rtbm') throw rtbmResult.reason;
+    if(daResult.status==='rejected' && tab==='da') throw daResult.reason;
+    // If on DA tab and DA loaded OK, show DA table
+    if(tab==='da' && daTabData.length) renderTableFull();
+  }catch(e){
+    setStatus('error','ERROR');
+    if(allData.length){
+      const warn=document.createElement('div');
+      warn.style.cssText='background:rgba(255,112,67,.1);border:1px solid rgba(255,112,67,.3);border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:.78rem;color:#ff7043;font-family:"IBM Plex Mono",monospace';
+      warn.innerHTML='⚠ '+e.message+' — showing last loaded data from '+(lastSeenInterval||'previous fetch');
+      const content=document.getElementById('content');
+      content.insertBefore(warn,content.firstChild);
+    } else {
+      showUploadUI(e.message);
+    }
+  }
+  btn.disabled=false; btn.textContent='⟳ Fetch Latest';
+}
+
+// Track last seen interval so we can detect stale proxy cache
+let lastSeenInterval = null;
+let debugLines = [];
+
+function dbLog(msg, type='info'){
+  debugLines.push({msg, type, t: new Date().toLocaleTimeString()});
+  if(debugLines.length > 40) debugLines.shift();
+  const el = document.getElementById('debugLog');
+  if(el && el.classList.contains('visible')){
+    el.innerHTML = debugLines.map(l=>
+      `<div class="dl-row dl-${l.type}">[${l.t}] ${l.msg}</div>`
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+}
+function toggleDebug(){
+  const el = document.getElementById('debugLog');
+  const btn = document.getElementById('debugBtn');
+  el.classList.toggle('visible');
+  btn.textContent = el.classList.contains('visible') ? '🔍 Hide Debug' : '🔍 Debug';
+  if(el.classList.contains('visible')){
+    el.innerHTML = debugLines.map(l=>
+      `<div class="dl-row dl-${l.type}">[${l.t}] ${l.msg}</div>`
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+async function fetchRTBM(){
+  const url = `${BASE}/rtbm-lmp-by-location?path=/RTBM-LMP-SL-latestInterval.csv`;
+  dbLog('Firing all proxies in parallel…', 'info');
+
+  const results = await Promise.allSettled(
+    PROXIES.map(async (proxyFn, i) => {
+      const proxyUrl = proxyFn(url);
+      dbLog(`Proxy ${i+1} (${PROXY_NAMES[i]}): firing…`, 'info');
+      const r = await fetchWithTimeout(proxyUrl, 12000);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const csv = await r.text();
+      if(!csv || csv.trim().startsWith('<!')) throw new Error('got HTML');
+      const lines = csv.split('\n');
+      const interval = (lines[1]||'').split(',')[0].trim();
+      return { i, csv, interval };
+    })
+  );
+
+  const successes = results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value);
+
+  results.forEach((r,i) => {
+    if(r.status === 'rejected'){
+      pip(i,'fail');
+      dbLog(`${PROXY_NAMES[i]} FAILED: ${r.reason ? r.reason.message : 'unknown'}`, 'fail');
+    } else {
+      dbLog(`${PROXY_NAMES[i]} interval: ${r.value.interval}`, 'info');
+    }
+  });
+
+  if(successes.length === 0){
+    throw new Error('All proxies failed — check network connection');
+  }
+
+  successes.sort((a,b) => b.interval.localeCompare(a.interval));
+  const best = successes[0];
+
+  if(best.interval === lastSeenInterval){
+    pip(best.i, 'fail');
+    dbLog(`All proxies stale: ${best.interval}`, 'warn');
+    throw new Error(`All proxies returned stale data (${best.interval}) — SPP may not have posted a new interval yet`);
+  }
+
+  pip(best.i,'ok');
+  lastGoodProxy = best.i;
+  lastSeenInterval = best.interval;
+  dbLog(`✓ Fresh data from ${PROXY_NAMES[best.i]}: ${best.interval}`, 'ok');
+  rtbmData = parseCSVToRows(best.csv);
+  updateMccPersistence(rtbmData);
+  captureSessionSnapshot(rtbmData);
+  if(tab==='rtbm'){ allData=rtbmData; renderTableFull(); }
+  checkAlerts(rtbmData);
+  updateWatchPanel();
+  checkSpreadAlerts();
+  if(tab==='leader') renderLeaderboard();
+  if(tab==='analytics') renderAnalytics();
+  if(tab==='session') renderSession();
+}
+
+function parseCSV(txt){
+  const lines=txt.trim().split(/\r?\n/);
+  if(lines.length<2) return [];
+  const hdrs=lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+  return lines.slice(1).map(l=>{
+    const v=l.split(',').map(x=>x.trim().replace(/"/g,''));
+    const o={}; hdrs.forEach((h,i)=>o[h]=v[i]??''); return o;
+  }).filter(r=>Object.values(r).some(v=>v));
+}
+
+function parseCSVToRows(csv){
+  const rows=parseCSV(csv);
+  if(!rows.length) throw new Error('No rows in CSV');
+  const g=(r,...ks)=>{ for(const k of ks){ if(r[k]!==undefined&&r[k]!=='') return r[k]; } return ''; };
+  const data = rows.map(r=>({
+    sl:      g(r,'settlement location','settlementlocation','settlement_location','sl').trim(),
+    pnode:   g(r,'pnode','pricing node','pricingnode').trim(),
+    lmp:   +(g(r,'lmp','lmp '))||0,
+    mec:   +(g(r,'mec'))||0,
+    mcc:   +(g(r,'mcc'))||0,
+    mlc:   +(g(r,'mlc'))||0,
+    interval: g(r,'interval','gmtintervalend','gmtinterval','intervalend').trim()
+  })).filter(r=>r.sl||r.pnode);
+  if(!data.length) throw new Error('Could not map columns. Found: '+Object.keys(rows[0]).join(', '));
+  return data;
+}
+
+function parseAndRender(csv,label){
+  allData = parseCSVToRows(csv);
+  renderTableFull();
+}
+
+function getZone(sl){
+  const s = sl.toUpperCase();
+  if(s.startsWith('CSWS')) return 'CSWS';
+  if(s.startsWith('NPPD')) return 'NPPD';
+  if(s.startsWith('WFEC')) return 'WFEC';
+  if(s.startsWith('SPS'))  return 'SPS';
+  if(s.startsWith('WAUE')) return 'WAUE';
+  if(s.startsWith('SECI')) return 'SECI';
+  if(s.startsWith('WERE')) return 'WERE';
+  if(s.startsWith('CLEC')) return 'CLEC';
+  if(s.startsWith('MIDW')) return 'MIDW';
+  return 'OTHER';
+}
+
+function populateZoneDropdown(){
+  const sel = document.getElementById('zoneSel');
+  if(!sel || !allData.length) return;
+  const current = sel.value;
+  const zones = [...new Set(allData.map(r=>getZone(r.sl)))].sort();
+  sel.innerHTML = '<option value="all">All Zones</option>' +
+    zones.map(z=>'<option value="'+z+'"'+(z===current?' selected':'')+'>'+z+'</option>').join('');
+}
+
+function getFilteredSortedRows(){
+  const q = document.getElementById('search')?.value.toLowerCase() || '';
+  const f = document.getElementById('filt')?.value || 'all';
+  const z = document.getElementById('zoneSel')?.value || 'all';
+
+  let rows = allData.filter(r=>{
+    const t = !q || r.sl.toLowerCase().includes(q) || r.pnode.toLowerCase().includes(q);
+    const p = f==='all'?true:f==='high'?r.lmp>50:f==='neg'?r.lmp<0:f==='low'?r.lmp<20:f==='watched'?watchedSls.has(r.sl):true;
+    const zone = z==='all' || getZone(r.sl)===z;
+    const cf_sl  = colFilters.sl.size === 0 || colFilters.sl.has(r.sl);
+    const cf_lmp = numericMatch(r.lmp, colFilters.lmp);
+    const cf_mcc = numericMatch(r.mcc, colFilters.mcc);
+    return t && p && zone && cf_sl && cf_lmp && cf_mcc;
+  });
+
+  rows.sort((a,b)=>{
+    let diff = 0;
+    if(sortCol==='name') diff = a.sl.localeCompare(b.sl);
+    else if(sortCol==='lmp')  diff = a.lmp - b.lmp;
+    else if(sortCol==='mec')  diff = a.mec - b.mec;
+    else if(sortCol==='mcc')  diff = a.mcc - b.mcc;
+    else if(sortCol==='mlc')  diff = a.mlc - b.mlc;
+    else diff = a.lmp - b.lmp;
+    return diff * sortDir;
+  });
+  return rows;
+}
+
+function buildTableBody(rows){
+  const maxAbsMcc = Math.max(1, ...rows.map(r=>Math.abs(r.mcc)));
+  const mccBarWidth = v => Math.round(Math.min(48, (Math.abs(v)/maxAbsMcc)*48));
+  return rows.map(r => {
+    const bw = mccBarWidth(r.mcc);
+    const bCls = r.mcc>=0 ? 'mcc-pos' : 'mcc-neg';
+    const isW = watchedSls.has(r.sl);
+    return '<tr class="'+(isW?'watched-row':'')+'" data-sl="'+escH(r.sl)+'">' +
+      '<td style="padding:6px 6px 6px 10px">' +
+        '<button class="star-btn'+(isW?' watched':'')+'" onclick="toggleWatch(\''+escH(r.sl)+'\',event)" title="'+(isW?'Remove from watch list':'Add to watch list')+'">'+(isW?'★':'☆')+'</button>' +
+      '</td>' +
+      '<td class="sl-cell">'+escH(r.sl||'—')+'</td>' +
+      '<td class="pnode-cell">'+escH(r.pnode||'—')+'</td>' +
+      '<td class="lp" style="color:'+lmpColor(r.lmp)+'">$'+r.lmp.toFixed(2)+'</td>' +
+      '<td class="comp">$'+r.mec.toFixed(2)+'</td>' +
+      '<td><div class="mcc-bar-wrap">' +
+        '<div class="mcc-bar '+bCls+'" style="width:'+bw+'px"></div>' +
+        '<span class="mcc-val" style="color:'+lmpColor(r.mcc)+'">$'+r.mcc.toFixed(2)+'</span>' +
+      '</div></td>' +
+      '<td class="comp">$'+r.mlc.toFixed(2)+'</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function renderTableShell(){
+  // Full render: builds thead + filter row + empty tbody, then fills body
+  function thSort(col, label) {
+    const active = sortCol === col;
+    const arrow = active ? (sortDir === 1 ? ' ▼' : ' ▲') : ' ⇅';
+    return '<th class="sortable'+(active?' sort-active':'')+'" onclick="toggleSort(\''+col+'\')">'+label+'<span class="sort-arrow">'+arrow+'</span></th>';
+  }
+  document.getElementById('content').innerHTML =
+    '<div class="table-wrap"><table id="mainTable">' +
+    '<thead>' +
+    '<tr>' +
+      '<th style="width:32px"></th>' +
+      thSort('name','Settlement Location') +
+      '<th>Pnode</th>' +
+      thSort('lmp','LMP ($/MWh)') +
+      thSort('mec','MEC') +
+      thSort('mcc','MCC') +
+      thSort('mlc','MLC') +
+    '</tr>' +
+    '<tr class="col-filter-row">' +
+      '<th></th>' +
+      '<th><button class="col-filter-btn" id="cfBtn_sl" onclick="openColFilter(\'sl\',this)">All locations</button></th>' +
+      '<th></th>' +
+      '<th><button class="col-filter-btn" id="cfBtn_lmp" onclick="openColFilter(\'lmp\',this)">All prices</button></th>' +
+      '<th></th>' +
+      '<th><button class="col-filter-btn" id="cfBtn_mcc" onclick="openColFilter(\'mcc\',this)">All MCC</button></th>' +
+      '<th></th>' +
+    '</tr>' +
+    '</thead>' +
+    '<tbody id="mainTbody"></tbody>' +
+    '</table></div>';
+  renderTableBody();
+  // Restore active filter button states after shell rebuild
+  ['sl','lmp','mcc'].forEach(col => updateFilterBtn(col));
+}
+
+function renderTableBody(){
+  // Only rebuilds tbody — preserves focus on filter inputs
+  const rows = getFilteredSortedRows();
+  document.getElementById('rowCount').textContent = rows.length.toLocaleString()+' / '+allData.length.toLocaleString()+' nodes';
+  const tbody = document.getElementById('mainTbody');
+  if(tbody){ tbody.innerHTML = buildTableBody(rows); }
+  wireTableClicks();
+}
+
+function renderTable(){
+  if(!allData.length) return;
+  // If the table shell already exists, just update tbody (preserves filter input focus)
+  if(document.getElementById('mainTbody')){
+    // Also update sort arrows in thead without rebuilding inputs
+    document.querySelectorAll('#mainTable th.sortable').forEach(th=>{
+      const col = th.getAttribute('onclick')?.match(/toggleSort\('(\w+)'\)/)?.[1];
+      if(!col) return;
+      const arrow = th.querySelector('.sort-arrow');
+      if(arrow) arrow.textContent = sortCol===col ? (sortDir===1?' ▼':' ▲') : ' ⇅';
+      th.classList.toggle('sort-active', sortCol===col);
+    });
+    renderTableBody();
+  } else {
+    renderTableShell();
+  }
+}
+
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function toggleSort(col){
+  if(sortCol === col){ sortDir *= -1; }
+  else { sortCol = col; sortDir = col==='name' ? 1 : -1; }
+  // Force shell rebuild so sort arrows update correctly, then body refills
+  if(document.getElementById('mainTbody')){
+    document.querySelectorAll('#mainTable th.sortable').forEach(th=>{
+      const m = th.getAttribute('onclick')?.match(/toggleSort\('(\w+)'\)/);
+      const c = m?.[1];
+      if(!c) return;
+      const arrow = th.querySelector('.sort-arrow');
+      if(arrow) arrow.textContent = sortCol===c ? (sortDir===1?' ▼':' ▲') : ' ⇅';
+      th.classList.toggle('sort-active', sortCol===c);
+    });
+    renderTableBody();
+  } else {
+    renderTable();
+  }
+}
+
+function filterLabel(col, val){
+  if(col === 'sl'){
+    const s = colFilters.sl;
+    if(s.size === 0) return 'All locations';
+    if(s.size === 1) return [...s][0];
+    return s.size + ' locations';
+  }
+  if(!val) return {lmp:'All prices', mcc:'All MCC'}[col];
+  return (FILTER_LABELS[col] && FILTER_LABELS[col][val]) || val;
+}
+
+function setColFilter(col, val){
+  if(col === 'sl'){
+    // val should be a Set or empty string to clear
+    if(!val || val === '') colFilters.sl.clear();
+    else colFilters.sl = val instanceof Set ? val : new Set([val]);
+  } else {
+    colFilters[col] = val;
+  }
+  updateFilterBtn(col);
+  renderTableBody();
+}
+
+function updateFilterBtn(col){
+  const btn = document.getElementById('cfBtn_'+col);
+  if(!btn) return;
+  const isActive = col === 'sl' ? colFilters.sl.size > 0 : !!colFilters[col];
+  btn.classList.toggle('active', isActive);
+  if(isActive){
+    btn.innerHTML = escH(filterLabel(col, colFilters[col])) +
+      '<span style="margin-left:5px;opacity:.7;font-size:.8rem" onclick="event.stopPropagation();clearColFilter(\''+col+'\')">×</span>';
+  } else {
+    btn.textContent = filterLabel(col, '');
+  }
+}
+
+function clearColFilter(col){
+  if(col === 'sl') colFilters.sl.clear();
+  else colFilters[col] = '';
+  updateFilterBtn(col);
+  renderTableBody();
+}
+
+// ── Column filter dropdown system ─────────────────────────────────────────────
+let openDropdownCol = null;
+
+document.addEventListener('mousedown', (e)=>{
+  const dd = document.getElementById('cfDropdown');
+  if(!dd) return;
+  if(!dd.contains(e.target) && !e.target.closest('.col-filter-btn')){
+    closeColFilter();
+  }
+});
+
+function openColFilter(col, btn){
+  if(openDropdownCol === col){ closeColFilter(); return; }
+  closeColFilter();
+  openDropdownCol = col;
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'cf-dropdown';
+  dropdown.id = 'cfDropdown';
+
+  if(col === 'sl'){
+    buildSlDropdown(dropdown);
+  } else {
+    buildNumDropdown(dropdown, col);
+  }
+
+  // Attach to body so table rebuilds never destroy it
+  document.body.appendChild(dropdown);
+
+  // Position below the button
+  const rect = btn.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.top = (rect.bottom + 2) + 'px';
+  dropdown.style.left = rect.left + 'px';
+
+  if(dropdown._initList) dropdown._initList();
+}
+
+function outsideColFilterClick(e){}
+
+function closeColFilter(){
+  const dd = document.getElementById('cfDropdown');
+  if(dd) dd.remove();
+  openDropdownCol = null;
+}
+
+function buildSlDropdown(dropdown){
+  const allSls = [...new Set(allData.map(r=>r.sl))].sort();
+
+  // Search input
+  const search = document.createElement('input');
+  search.className = 'cf-search';
+  search.placeholder = 'Search locations…';
+  search.autocomplete = 'off';
+  dropdown.appendChild(search);
+
+  // Action bar: Select All visible / Watch All visible
+  const actionBar = document.createElement('div');
+  actionBar.style.cssText = 'display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0';
+  const selAllBtn = document.createElement('div');
+  selAllBtn.style.cssText = 'flex:1;padding:5px 10px;font-size:.68rem;font-family:"IBM Plex Mono",monospace;cursor:pointer;color:var(--positive);text-align:center;border-right:1px solid var(--border)';
+  selAllBtn.textContent = '✓ Select all';
+  const watchAllBtn = document.createElement('div');
+  watchAllBtn.style.cssText = 'flex:1;padding:5px 10px;font-size:.68rem;font-family:"IBM Plex Mono",monospace;cursor:pointer;color:#ffd54f;text-align:center';
+  watchAllBtn.textContent = '★ Watch all';
+  actionBar.appendChild(selAllBtn);
+  actionBar.appendChild(watchAllBtn);
+  dropdown.appendChild(actionBar);
+
+  // List
+  const list = document.createElement('div');
+  list.className = 'cf-list';
+  dropdown.appendChild(list);
+
+  // Clear
+  const clear = document.createElement('div');
+  clear.className = 'cf-clear';
+  clear.textContent = '✕ Clear selection';
+  clear.addEventListener('click', ()=>{ colFilters.sl.clear(); updateFilterBtn('sl'); renderTableBody(); closeColFilter(); });
+  dropdown.appendChild(clear);
+
+  let currentFiltered = allSls;
+
+  const renderList = (q) => {
+    currentFiltered = q ? allSls.filter(s=>s.toLowerCase().includes(q.toLowerCase())) : allSls;
+    list.innerHTML = '';
+    currentFiltered.slice(0, 200).forEach(sl => {
+      const item = document.createElement('div');
+      const isSelected = colFilters.sl.has(sl);
+      item.className = 'cf-item' + (isSelected ? ' selected' : '');
+      const check = document.createElement('span');
+      check.className = 'cf-item-check';
+      check.textContent = isSelected ? '✓' : '';
+      const label = document.createElement('span');
+      label.textContent = sl;
+      // Star indicator if watched
+      if(watchedSls.has(sl)){
+        const star = document.createElement('span');
+        star.textContent = '★';
+        star.style.cssText = 'color:#ffd54f;margin-left:auto;font-size:.75rem;flex-shrink:0';
+        item.appendChild(check);
+        item.appendChild(label);
+        item.appendChild(star);
+      } else {
+        item.appendChild(check);
+        item.appendChild(label);
+      }
+      item.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(colFilters.sl.has(sl)) colFilters.sl.delete(sl);
+        else colFilters.sl.add(sl);
+        const isNowSelected = colFilters.sl.has(sl);
+        item.classList.toggle('selected', isNowSelected);
+        check.textContent = isNowSelected ? '✓' : '';
+        updateFilterBtn('sl');
+        renderTableBody();
+      });
+      list.appendChild(item);
+    });
+    if(currentFiltered.length > 200){
+      const more = document.createElement('div');
+      more.className = 'cf-item';
+      more.style.cssText = 'color:var(--muted);cursor:default';
+      more.textContent = '…' + (currentFiltered.length - 200) + ' more — type to narrow';
+      list.appendChild(more);
+    }
+    // Update Select all button text
+    const allSelected = currentFiltered.slice(0,200).every(sl=>colFilters.sl.has(sl));
+    selAllBtn.textContent = allSelected ? '✓ Deselect all' : '✓ Select all';
+  };
+
+  selAllBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const allSelected = currentFiltered.slice(0,200).every(sl=>colFilters.sl.has(sl));
+    if(allSelected){ currentFiltered.forEach(sl=>colFilters.sl.delete(sl)); }
+    else { currentFiltered.slice(0,200).forEach(sl=>colFilters.sl.add(sl)); }
+    updateFilterBtn('sl');
+    renderTableBody();
+    renderList(search.value);
+  });
+
+  watchAllBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    currentFiltered.slice(0,200).forEach(sl=>{
+      if(!watchedSls.has(sl)){ watchedSls.add(sl); backfillWatchHistory(sl); }
+    });
+    updateWatchPanel();
+    const expBtn = document.getElementById('exportSelectedBtn');
+    if(expBtn) expBtn.classList.toggle('visible', watchedSls.size > 0);
+    renderList(search.value); // refresh stars
+  });
+
+  search.addEventListener('input', e => renderList(e.target.value));
+  search.addEventListener('keydown', e => e.stopPropagation());
+
+  dropdown._initList = () => { renderList(''); search.focus(); };
+}
+
+function buildNumDropdown(dropdown, col){
+  const isLmp = col === 'lmp';
+  const buckets = isLmp
+    ? [
+        {label:'Negative  (< $0)',    val:'<0'},
+        {label:'Low  ($0 – $20)',     val:'>=0,<=20'},
+        {label:'Mid  ($20 – $50)',    val:'>20,<=50'},
+        {label:'High  ($50 – $100)', val:'>50,<=100'},
+        {label:'Very High  (> $100)',val:'>100'},
+      ]
+    : [
+        {label:'Constrained  (< -$5)',   val:'<-5'},
+        {label:'Slightly neg  (-$5–$0)', val:'>=-5,<0'},
+        {label:'Near zero  (-$2–$2)',    val:'>=-2,<=2'},
+        {label:'Slightly pos  ($0–$5)',  val:'>0,<=5'},
+        {label:'Surplus  (> $5)',        val:'>5'},
+      ];
+
+  const list = document.createElement('div');
+  list.className = 'cf-list';
+  buckets.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'cf-item' + (colFilters[col] === b.val ? ' selected' : '');
+    const check = document.createElement('span');
+    check.className = 'cf-item-check';
+    check.textContent = colFilters[col] === b.val ? '✓' : '';
+    const label = document.createElement('span');
+    label.textContent = b.label;
+    item.appendChild(check);
+    item.appendChild(label);
+    item.addEventListener('click', ()=>{ setColFilter(col, b.val); closeColFilter(); });
+    list.appendChild(item);
+  });
+  dropdown.appendChild(list);
+
+  // Custom expression section
+  const customWrap = document.createElement('div');
+  customWrap.style.cssText = 'padding:6px 10px;border-top:1px solid var(--border)';
+  const customLabel = document.createElement('div');
+  customLabel.style.cssText = 'font-size:.67rem;color:var(--muted);font-family:"IBM Plex Mono",monospace;margin-bottom:4px';
+  customLabel.textContent = 'CUSTOM EXPRESSION';
+  const customInput = document.createElement('input');
+  customInput.className = 'cf-search';
+  customInput.style.cssText = 'border-bottom:none;border:1px solid var(--border);border-radius:4px;width:100%;box-sizing:border-box';
+  customInput.placeholder = 'e.g. <-10 or >50';
+  // Show current value if it's not a bucket value
+  const isBucket = buckets.some(b=>b.val===colFilters[col]);
+  customInput.value = (!isBucket && colFilters[col]) ? colFilters[col] : '';
+  customInput.addEventListener('input', e => { colFilters[col] = e.target.value; renderTableBody(); });
+  customInput.addEventListener('keydown', e => { if(e.key==='Enter'){ setColFilter(col, e.target.value); closeColFilter(); } e.stopPropagation(); });
+  customWrap.appendChild(customLabel);
+  customWrap.appendChild(customInput);
+  dropdown.appendChild(customWrap);
+
+  const clear = document.createElement('div');
+  clear.className = 'cf-clear';
+  clear.textContent = '✕ Clear filter';
+  clear.addEventListener('click', ()=>{ setColFilter(col,''); closeColFilter(); });
+  dropdown.appendChild(clear);
+
+  dropdown._initList = () => {};
+}
+
+// Extend the numeric filter parser to handle range syntax ">=X,<=Y"
+function numericMatch(val, filterStr){
+  if(!filterStr) return true;
+  // Range: two comma-separated conditions
+  if(filterStr.includes(',')){
+    return filterStr.split(',').every(part=>{
+      const m = part.trim().match(/^([<>]=?|=)\s*(-?\d+\.?\d*)$/);
+      if(!m) return true;
+      const [,op,v] = m; const n = parseFloat(v);
+      return op==='<'?val<n:op==='<='?val<=n:op==='>'?val>n:op==='>='?val>=n:Math.abs(val-n)<0.01;
+    });
+  }
+  const m = filterStr.match(/^([<>]=?|=)?\s*(-?\d+\.?\d*)$/);
+  if(!m) return true;
+  const [,op,v] = m; const n = parseFloat(v);
+  return op==='<'?val<n:op==='<='?val<=n:op==='>'?val>n:op==='>='?val>=n:Math.abs(val-n)<0.01;
+}
+
+
+
+
+// ── ALERTS ──────────────────────────────────────────────────
+function toggleAlertConfig(){
+  document.getElementById('alertConfig').classList.toggle('visible');
+}
+function saveAlerts(){
+  const h = parseFloat(document.getElementById('alertHigh').value);
+  const l = parseFloat(document.getElementById('alertLow').value);
+  alertHigh = isNaN(h) ? null : h;
+  alertLow  = isNaN(l) ? null : l;
+  const parts=[];
+  if(alertHigh!==null) parts.push(`HIGH > $${alertHigh}`);
+  if(alertLow!==null)  parts.push(`LOW < $${alertLow}`);
+  const status = parts.length ? '✓ Alerts active: '+parts.join('  |  ') : 'No alerts set.';
+  document.getElementById('alertStatus').textContent = status;
+  document.getElementById('alertDot').className = 'alert-dot'+(parts.length?' on':'');
+  if(parts.length) dbLog('Alerts set: '+parts.join(', '),'ok');
+}
+function clearAlerts(){
+  alertHigh=null; alertLow=null;
+  document.getElementById('alertHigh').value='';
+  document.getElementById('alertLow').value='';
+  document.getElementById('alertStatus').textContent='No alerts set.';
+  document.getElementById('alertDot').className='alert-dot';
+  dismissAlert();
+}
+function dismissAlert(){
+  const b=document.getElementById('alertBanner');
+  b.classList.remove('visible');
+  alertActive=false;
+}
+function playChime(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(1100, audioCtx.currentTime+0.12);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.5);
+    osc.start(); osc.stop(audioCtx.currentTime+0.5);
+  }catch(e){}
+}
+function checkAlerts(data){
+  if(alertHigh===null && alertLow===null) return;
+  const msgs=[];
+  if(alertHigh!==null){
+    const hits=data.filter(r=>r.lmp>alertHigh);
+    if(hits.length) msgs.push(`⚡ ${hits.length} node${hits.length>1?'s':''} above $${alertHigh} (max $${Math.max(...hits.map(r=>r.lmp)).toFixed(2)})`);
+  }
+  if(alertLow!==null){
+    const hits=data.filter(r=>r.lmp<alertLow);
+    if(hits.length) msgs.push(`⚡ ${hits.length} node${hits.length>1?'s':''} below $${alertLow} (min $${Math.min(...hits.map(r=>r.lmp)).toFixed(2)})`);
+  }
+  if(msgs.length){
+    document.getElementById('alertBannerText').textContent=msgs.join('  |  ');
+    document.getElementById('alertBanner').classList.add('visible');
+    alertActive=true;
+    playChime();
+    dbLog('ALERT: '+msgs.join(' | '),'warn');
+  } else {
+    dismissAlert();
+  }
+}
+
+// ── MCC PERSISTENCE ─────────────────────────────────────────
+function updateMccPersistence(data){
+  const next={};
+  data.forEach(r=>{
+    const prev = mccPersist[r.sl]||{posCount:0,negCount:0};
+    next[r.sl] = {
+      posCount: r.mcc > 2  ? prev.posCount+1 : 0,
+      negCount: r.mcc < -2 ? prev.negCount+1 : 0,
+      mcc: r.mcc,
+      lmp: r.lmp,
+      sl:  r.sl
+    };
+  });
+  mccPersist = next;
+}
+
+// ── LEADERBOARD ──────────────────────────────────────────────
+function renderLeaderboard(){
+  if(!rtbmData.length){
+    document.getElementById('content').innerHTML=`
+      <div class="upload-zone"><h2>⚡ Congestion Leaderboard</h2>
+      <p>Fetch RTBM data first to see congestion rankings.</p></div>`;
+    return;
+  }
+  setStatus('live','LIVE');
+  const sorted = [...rtbmData];
+  const topNegMcc = [...sorted].sort((a,b)=>a.mcc-b.mcc).slice(0,10);
+  const topPosMcc = [...sorted].sort((a,b)=>b.mcc-a.mcc).slice(0,10);
+
+  // RT vs DA spread (only if DA loaded)
+  const spreadRows = daLoadedDate ? (() => {
+    const hKey = rtbmData.length ? getHourEndingKey(rtbmData[0].interval) : null;
+    if(!hKey) return [];
+    return rtbmData
+      .map(r=>({ ...r, daLmp: (daStore[r.sl]&&daStore[r.sl][hKey]!=null)?daStore[r.sl][hKey]:null }))
+      .filter(r=>r.daLmp!==null)
+      .map(r=>({...r, spread:r.lmp-r.daLmp}))
+      .sort((a,b)=>Math.abs(b.spread)-Math.abs(a.spread))
+      .slice(0,10);
+  })() : [];
+
+  // Persistence — top nodes by consecutive congested intervals
+  const persistRows = Object.values(mccPersist)
+    .map(r=>({...r, maxCount:Math.max(r.posCount,r.negCount), dir:r.negCount>r.posCount?'neg':'pos'}))
+    .filter(r=>r.maxCount>0)
+    .sort((a,b)=>b.maxCount-a.maxCount)
+    .slice(0,10);
+  const maxPersist = persistRows[0]?.maxCount||1;
+
+  function leaderRows(items, valFn, subFn, colorFn){
+    if(!items.length) return '<div class="leader-empty">No data yet</div>';
+    return items.map(function(r,i){
+      return '<div class="leader-row" onclick="openModalFromLeader(\'' + r.sl.replace(/'/g,"\\'") + '\')">' +
+        '<span class="leader-rank">' + (i+1) + '</span>' +
+        '<span class="leader-name" title="' + r.sl + '">' + r.sl + '</span>' +
+        '<span class="leader-val" style="color:' + colorFn(r) + '">' + valFn(r) + '</span>' +
+        '<span class="leader-sub">' + subFn(r) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function persistRowsHtml(){
+    if(!persistRows.length) return '<div class="leader-empty">Need 2+ fetches to track persistence</div>';
+    return persistRows.map(function(r,i){
+      const pct = Math.round((r.maxCount/maxPersist)*100);
+      return '<div class="leader-row" onclick="openModalFromLeader(\'' + r.sl.replace(/'/g,"\\'") + '\')">' +
+        '<span class="leader-rank">' + (i+1) + '</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="leader-name" title="' + r.sl + '">' + r.sl + '</div>' +
+          '<div class="persist-bar" style="width:100%;margin-top:4px">' +
+            '<div class="persist-fill" style="width:' + pct + '%"></div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="leader-val" style="color:#b39ddb;margin-left:8px">' + r.maxCount + '\u00d7</span>' +
+        '<span class="leader-sub">' + (r.dir==='neg'?'constrained':'surplus') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  const interval = rtbmData[0]?.interval||'';
+  document.getElementById('ts').innerHTML='<span class="badge">Congestion Leaderboard</span>&nbsp;&nbsp;Interval: '+interval+' CT&nbsp;&nbsp;|&nbsp;&nbsp;Updated: '+new Date().toLocaleTimeString();
+
+  const spreadNote = !daLoadedDate ? '<span style="font-weight:400;opacity:.5">(load DA first)</span>' : '';
+  const spreadContent = spreadRows.length
+    ? leaderRows(spreadRows, r=>(r.spread>=0?'+':'')+'$'+r.spread.toFixed(2), r=>'RT $'+r.lmp.toFixed(2)+' / DA $'+r.daLmp.toFixed(2), r=>r.spread>0?'var(--negative)':'var(--positive)')
+    : '<div class="leader-empty">Load DA data to see spreads</div>';
+
+  document.getElementById('content').innerHTML =
+    '<div class="leader-grid">' +
+      '<div class="leader-panel">' +
+        '<div class="leader-panel-hdr lhdr-neg">\uD83D\uDD35 Most Negative MCC <span style="font-weight:400;opacity:.7">(constrained)</span></div>' +
+        leaderRows(topNegMcc, r=>'$'+r.mcc.toFixed(2), r=>'LMP $'+r.lmp.toFixed(2), r=>'var(--negative)') +
+      '</div>' +
+      '<div class="leader-panel">' +
+        '<div class="leader-panel-hdr lhdr-pos">\uD83D\uDD34 Most Positive MCC <span style="font-weight:400;opacity:.7">(surplus export)</span></div>' +
+        leaderRows(topPosMcc, r=>'$'+r.mcc.toFixed(2), r=>'LMP $'+r.lmp.toFixed(2), r=>'var(--negative)') +
+      '</div>' +
+      '<div class="leader-panel">' +
+        '<div class="leader-panel-hdr lhdr-spread">\u26A1 Biggest RT vs DA Spread ' + spreadNote + '</div>' +
+        spreadContent +
+      '</div>' +
+      '<div class="leader-panel">' +
+        '<div class="leader-panel-hdr lhdr-persist">\uD83D\uDFE3 MCC Persistence <span style="font-weight:400;opacity:.7">(consecutive intervals)</span></div>' +
+        persistRowsHtml() +
+      '</div>' +
+    '</div>';
+}
+
+function openModalFromLeader(sl){
+  const row = rtbmData.find(r=>r.sl===sl);
+  if(row) openModal(row.sl, row.lmp, row.interval);
+}
+
+// ─── ANALYTICS TAB ───────────────────────────────────────────────────────────
+function renderAnalytics(){
+  const content = document.getElementById('content');
+  const data = rtbmData;
+
+  if(!data.length){
+    content.innerHTML =
+      '<div class="leader-panel" style="margin-top:4px"><div class="leader-empty">' +
+      '📊 Fetch RTBM data first to see analytics.</div></div>';
+    document.getElementById('ts').innerHTML = '';
+    return;
+  }
+
+  const interval = data[0]?.interval || '';
+  document.getElementById('ts').innerHTML =
+    '<span class="badge">Analytics</span>&nbsp;&nbsp;Interval: ' + interval +
+    ' CT&nbsp;&nbsp;|&nbsp;&nbsp;Updated: ' + new Date().toLocaleTimeString();
+
+  const ZONES = ['CSWS','NPPD','WFEC','SPS','WAUE','SECI','WERE','CLEC','MIDW','OTHER'];
+
+  // Build per-zone arrays
+  const byZone = {};
+  ZONES.forEach(z => byZone[z] = []);
+  data.forEach(r => { const z = getZone(r.sl); if(byZone[z]) byZone[z].push(r); });
+  const activeZones = ZONES.filter(z => byZone[z].length > 0);
+
+  // Zone stats: avg LMP, avg MCC, node count
+  const zoneStats = {};
+  activeZones.forEach(z => {
+    const rows = byZone[z];
+    const lmps = rows.map(r => r.lmp);
+    const mccs = rows.map(r => r.mcc);
+    zoneStats[z] = {
+      count: rows.length,
+      avgLmp: lmps.reduce((a,b)=>a+b,0)/lmps.length,
+      avgMcc: mccs.reduce((a,b)=>a+b,0)/mccs.length,
+      minLmp: Math.min(...lmps),
+      maxLmp: Math.max(...lmps),
+      negCount: lmps.filter(v=>v<0).length,
+    };
+  });
+
+  // ── PANEL 1: LMP Distribution Heatmap ───────────────────────────────────
+  const LMP_BUCKETS = [
+    {label:'< $0',   min:-Infinity, max:0},
+    {label:'$0–20',  min:0,  max:20},
+    {label:'$20–40', min:20, max:40},
+    {label:'$40–60', min:40, max:60},
+    {label:'$60–80', min:60, max:80},
+    {label:'$80–100',min:80, max:100},
+    {label:'> $100', min:100,max:Infinity},
+  ];
+
+  // Color for LMP cell: negative bucket = red shades, positive = green shades
+  function lmpBucketColor(bucketIdx, count, maxCount){
+    if(count === 0) return 'background:rgba(255,255,255,.03);color:var(--muted)';
+    const t = Math.min(1, count / Math.max(1, maxCount));
+    if(bucketIdx === 0){
+      // negative — red
+      const r=255, g=Math.round(82+t*(-82)), b=Math.round(82+t*(-82));
+      return 'background:rgba('+r+','+g+','+b+','+(0.15+t*0.65)+');color:#fff';
+    } else if(bucketIdx === 6){
+      // >$100 — deep red (scarcity)
+      const r=255, g=Math.round(82-t*60), b=Math.round(82-t*60);
+      return 'background:rgba('+r+','+g+','+b+','+(0.15+t*0.65)+');color:#fff';
+    } else {
+      // normal positive — green shades
+      const r=Math.round(105+t*(-40)), g=240, b=Math.round(174+t*(-40));
+      return 'background:rgba('+r+','+g+','+b+','+(0.12+t*0.55)+');color:#0d0f14';
+    }
+  }
+
+  // Compute total nodes per bucket across all zones for the % row
+  const totalNodes = data.length;
+  const bucketTotals = LMP_BUCKETS.map(b => data.filter(r => r.lmp >= b.min && r.lmp < b.max).length);
+
+  let hmLmp = '<div class="heatmap-wrap"><table class="hm-table"><thead>' +
+    // % of total row
+    '<tr>' +
+    '<th class="row-hdr" style="color:var(--muted);font-size:.62rem">% of all nodes</th>' +
+    '<th></th>' +
+    bucketTotals.map(c => {
+      const pct = totalNodes > 0 ? Math.round(c/totalNodes*100) : 0;
+      return '<th style="color:var(--muted);font-size:.7rem;font-weight:700">' + (pct > 0 ? pct+'%' : '—') + '</th>';
+    }).join('') +
+    '</tr>' +
+    // Bucket label row
+    '<tr>' +
+    '<th class="row-hdr">Zone</th><th class="row-hdr" style="text-align:center">Nodes</th>';
+  LMP_BUCKETS.forEach(b => { hmLmp += '<th>' + b.label + '</th>'; });
+  hmLmp += '</tr></thead><tbody>';
+
+  activeZones.forEach(z => {
+    const rows = byZone[z];
+    const counts = LMP_BUCKETS.map(b => rows.filter(r => r.lmp >= b.min && r.lmp < b.max).length);
+    const maxC = Math.max(1, ...counts);
+    hmLmp += '<tr><td class="hm-zone-label">' + z + '</td>' +
+      '<td style="text-align:center;color:var(--muted)">' + rows.length + '</td>';
+    counts.forEach((c,i) => {
+      hmLmp += '<td style="' + lmpBucketColor(i, c, maxC) + '">' + (c||'—') + '</td>';
+    });
+    hmLmp += '</tr>';
+  });
+  hmLmp += '</tbody></table></div>' +
+    '<div class="hm-note">Each cell = node count in that price bucket for this interval. ' +
+    'Darker = more nodes concentrated there.</div>';
+
+  // ── PANEL 2: MCC Heatmap ────────────────────────────────────────────────
+  const MCC_BUCKETS = [
+    {label:'< -$20',  min:-Infinity,max:-20},
+    {label:'-$20–-$5',min:-20, max:-5},
+    {label:'-$5–$0',  min:-5,  max:0},
+    {label:'$0–$5',   min:0,   max:5},
+    {label:'$5–$20',  min:5,   max:20},
+    {label:'> $20',   min:20,  max:Infinity},
+  ];
+
+  function mccBucketColor(bucketIdx, count, maxCount){
+    if(count === 0) return 'background:rgba(255,255,255,.03);color:var(--muted)';
+    const t = Math.min(1, count / Math.max(1, maxCount));
+    if(bucketIdx <= 1){
+      // deep negative MCC = red (constrained)
+      const intensity = bucketIdx === 0 ? t : t * 0.7;
+      return 'background:rgba(255,82,82,'+(0.15+intensity*0.65)+');color:#fff';
+    } else if(bucketIdx === 2){
+      // mildly negative = light red/pink
+      return 'background:rgba(255,160,130,'+(0.15+t*0.5)+');color:#0d0f14';
+    } else if(bucketIdx === 3){
+      // near zero = neutral
+      return 'background:rgba(255,255,255,'+(0.04+t*0.1)+');color:var(--muted)';
+    } else if(bucketIdx === 4){
+      // mildly positive = light green
+      return 'background:rgba(105,240,174,'+(0.15+t*0.45)+');color:#0d0f14';
+    } else {
+      // large positive MCC = bright green
+      return 'background:rgba(105,240,174,'+(0.25+t*0.6)+');color:#0d0f14';
+    }
+  }
+
+  let hmMcc = '<div class="heatmap-wrap"><table class="hm-table"><thead><tr>' +
+    '<th class="row-hdr">Zone</th><th class="row-hdr" style="text-align:center">Nodes</th>';
+  MCC_BUCKETS.forEach(b => { hmMcc += '<th>' + b.label + '</th>'; });
+  hmMcc += '</tr></thead><tbody>';
+
+  activeZones.forEach(z => {
+    const rows = byZone[z];
+    const counts = MCC_BUCKETS.map(b => rows.filter(r => r.mcc >= b.min && r.mcc < b.max).length);
+    const maxC = Math.max(1, ...counts);
+    hmMcc += '<tr><td class="hm-zone-label">' + z + '</td>' +
+      '<td style="text-align:center;color:var(--muted)">' + rows.length + '</td>';
+    counts.forEach((c,i) => {
+      hmMcc += '<td style="' + mccBucketColor(i, c, maxC) + '">' + (c||'—') + '</td>';
+    });
+    hmMcc += '</tr>';
+  });
+  hmMcc += '</tbody></table></div>' +
+    '<div class="hm-note">Red = nodes with negative MCC (behind a binding constraint). ' +
+    'Green = nodes with positive MCC (surplus/export side). ' +
+    'Darker = more nodes in that bucket.</div>';
+
+  // ── PANEL 3: Suspected Constrained Paths ────────────────────────────────
+  // Logic: for each zone-pair (A,B), if avgMcc(A) << 0 and avgMcc(B) >> 0,
+  // suspect a binding constraint on the A→B interface.
+  // Score = abs(avgMcc_A) + avgMcc_B (total price wedge)
+  const paths = [];
+  for(let i = 0; i < activeZones.length; i++){
+    for(let j = 0; j < activeZones.length; j++){
+      if(i === j) continue;
+      const zA = activeZones[i];
+      const zB = activeZones[j];
+      const statA = zoneStats[zA];
+      const statB = zoneStats[zB];
+      // Only flag if A is significantly negative MCC and B is significantly positive
+      if(statA.avgMcc < -2 && statB.avgMcc > 2){
+        const wedge = Math.abs(statA.avgMcc) + statB.avgMcc;
+        const lmpSpread = statB.avgLmp - statA.avgLmp;
+        // Require meaningful LMP spread too (>$3) to reduce noise
+        if(lmpSpread > 3 || wedge > 8){
+          paths.push({
+            from: zA, to: zB,
+            wedge, lmpSpread,
+            fromMcc: statA.avgMcc,
+            toMcc: statB.avgMcc,
+            fromAvgLmp: statA.avgLmp,
+            toAvgLmp: statB.avgLmp,
+            fromNodes: statA.count,
+            toNodes: statB.count,
+          });
+        }
+      }
+    }
+  }
+  paths.sort((a,b) => b.wedge - a.wedge);
+
+  let pathsHtml = '';
+  if(paths.length === 0){
+    pathsHtml = '<div class="path-empty">No significant constrained paths detected this interval.<br>' +
+      '<span style="font-size:.68rem">All zone MCC differentials are within normal range.</span></div>';
+  } else {
+    const maxWedge = paths[0].wedge;
+    paths.slice(0,8).forEach((p,idx) => {
+      const barW = Math.round((p.wedge / maxWedge) * 100);
+      const sev = p.wedge > 20 ? 'HIGH' : p.wedge > 10 ? 'MED' : 'LOW';
+      const sevCls = p.wedge > 20 ? 'severity-high' : p.wedge > 10 ? 'severity-med' : 'severity-low';
+      pathsHtml +=
+        '<div class="path-row">' +
+          '<div class="path-rank">' + (idx+1) + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">' +
+              '<span class="path-from" style="font-weight:700;font-size:.82rem">' + p.from + '</span>' +
+              '<span class="path-arrow">→</span>' +
+              '<span class="path-to" style="font-weight:700;font-size:.82rem">' + p.to + '</span>' +
+              '&nbsp;<span class="' + sevCls + '" style="font-size:.65rem;font-family:\'IBM Plex Mono\',monospace;font-weight:700">[' + sev + ']</span>' +
+            '</div>' +
+            '<div class="path-bar-wrap" style="width:100%;max-width:200px">' +
+              '<div class="path-bar-bg"><div class="path-bar-fill" style="width:' + barW + '%"></div></div>' +
+            '</div>' +
+            '<div style="font-size:.68rem;color:var(--muted);font-family:\'IBM Plex Mono\',monospace;margin-top:3px">' +
+              p.from + ' avg MCC <span style="color:var(--negative)">$' + p.fromMcc.toFixed(1) + '</span>' +
+              '&nbsp;|&nbsp;' + p.to + ' avg MCC <span style="color:var(--positive)">$' + p.toMcc.toFixed(1) + '</span>' +
+              '&nbsp;|&nbsp;LMP spread <span style="color:#ffd54f">$' + p.lmpSpread.toFixed(1) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="text-align:right;flex-shrink:0;font-family:\'IBM Plex Mono\',monospace">' +
+            '<div style="font-size:.82rem;font-weight:700;color:var(--negative)">$' + p.wedge.toFixed(1) + '</div>' +
+            '<div style="font-size:.65rem;color:var(--muted)">MCC wedge</div>' +
+          '</div>' +
+        '</div>';
+    });
+  }
+
+  // ── Assemble ─────────────────────────────────────────────────────────────
+  content.innerHTML =
+    '<div class="analytics-grid">' +
+
+      // Panel 1 — LMP Distribution
+      '<div class="analytics-panel">' +
+        '<div class="analytics-hdr ahdr-price">📈 LMP Distribution by Zone</div>' +
+        hmLmp +
+      '</div>' +
+
+      // Panel 2 — MCC Heatmap
+      '<div class="analytics-panel">' +
+        '<div class="analytics-hdr ahdr-mcc">⚡ MCC Congestion by Zone</div>' +
+        hmMcc +
+      '</div>' +
+
+      // Panel 3 — Constrained Paths (full width)
+      '<div class="analytics-panel analytics-full">' +
+        '<div class="analytics-hdr ahdr-paths">🔍 Suspected Constrained Transmission Paths</div>' +
+        '<div style="padding:10px 14px 4px;font-size:.72rem;color:var(--muted);font-family:\'IBM Plex Mono\',monospace;line-height:1.7">' +
+          'Detected by finding zone-pairs where one zone has significantly negative avg MCC (constrained, generation-heavy side) ' +
+          'and the adjacent zone has significantly positive avg MCC (load-heavy side). ' +
+          'The MCC wedge = price shadow of the binding constraint. Ranked by severity.' +
+        '</div>' +
+        pathsHtml +
+      '</div>' +
+
+    '</div>';
+}
+// ─── END ANALYTICS TAB ───────────────────────────────────────────────────────
+
+// ─── SESSION HISTORY ─────────────────────────────────────────────────────────
+
+const ZONE_COLORS = {
+  CSWS:'#69f0ae', NPPD:'#80deea', WFEC:'#ce93d8', SPS:'#ffd54f',
+  WAUE:'#ff8a65', SECI:'#f48fb1', WERE:'#a5d6a7', CLEC:'#80cbc4',
+  MIDW:'#ffcc80', OTHER:'#b0bec5'
+};
+let sessionTrendChart = null;
+
+function captureSessionSnapshot(data){
+  if(!data.length) return;
+  const interval = data[0].interval;
+  // Deduplicate — skip if same interval already stored
+  if(sessionSnapshots.length && sessionSnapshots[sessionSnapshots.length-1].interval === interval) return;
+
+  const lmps = data.map(r=>r.lmp);
+  const avgLmp = lmps.reduce((a,b)=>a+b,0)/lmps.length;
+  const maxLmp = Math.max(...lmps);
+  const minLmp = Math.min(...lmps);
+  const negCount = lmps.filter(v=>v<0).length;
+
+  // Zone averages
+  const ZONES = ['CSWS','NPPD','WFEC','SPS','WAUE','SECI','WERE','CLEC','MIDW','OTHER'];
+  const zoneAvgs = {};
+  ZONES.forEach(z=>{
+    const zrows = data.filter(r=>getZone(r.sl)===z);
+    zoneAvgs[z] = zrows.length ? zrows.reduce((s,r)=>s+r.lmp,0)/zrows.length : null;
+  });
+
+  // Top 3 constrained
+  const topConstrained = [...data].sort((a,b)=>a.mcc-b.mcc).slice(0,3).map(r=>({sl:r.sl,mcc:r.mcc,lmp:r.lmp}));
+
+  const snap = {interval, ts: Date.now(), avgLmp, maxLmp, minLmp, negCount, zoneAvgs, topConstrained};
+  sessionSnapshots.push(snap);
+
+  // Session extremes
+  const maxRow = data.reduce((m,r)=>r.lmp>m.lmp?r:m, data[0]);
+  const minRow = data.reduce((m,r)=>r.lmp<m.lmp?r:m, data[0]);
+  if(!sessionHigh || maxRow.lmp > sessionHigh.lmp) sessionHigh = {lmp:maxRow.lmp, sl:maxRow.sl, interval};
+  if(!sessionLow  || minRow.lmp < sessionLow.lmp)  sessionLow  = {lmp:minRow.lmp, sl:minRow.sl, interval};
+
+  // Watch history
+  watchedSls.forEach(sl=>{
+    const row = data.find(r=>r.sl===sl);
+    if(!row) return;
+    const hr = getHourEndingKey(interval);
+    const daLmp = daStore[sl]&&hr ? daStore[sl][hr] : null;
+    const spread = daLmp!==null ? row.lmp-daLmp : null;
+    if(!watchHistory[sl]) watchHistory[sl]=[];
+    watchHistory[sl].push({interval, ts:Date.now(), lmp:row.lmp, mcc:row.mcc, spread});
+  });
+
+  // Generate stories
+  generateStories(snap, data);
+}
+
+function generateStories(snap, data){
+  const prev = sessionSnapshots.length >= 2 ? sessionSnapshots[sessionSnapshots.length-2] : null;
+  const stories = [];
+
+  // ── Zone swing ──
+  if(prev){
+    Object.keys(snap.zoneAvgs).forEach(z=>{
+      const cur = snap.zoneAvgs[z], old = prev.zoneAvgs[z];
+      if(cur===null||old===null) return;
+      const delta = cur - old;
+      if(Math.abs(delta) >= 5){
+        stories.push({
+          icon: delta>0?'📈':'📉',
+          headline: z+' avg LMP '+(delta>0?'jumped':'dropped')+' $'+Math.abs(delta).toFixed(1)+' this interval',
+          detail: 'From $'+old.toFixed(2)+' → $'+cur.toFixed(2)+' avg. '+(cur<0?'Zone now negative avg.':''),
+          severity: Math.abs(delta)>=15?'high':Math.abs(delta)>=8?'med':'low'
+        });
+      }
+    });
+  }
+
+  // ── Neg node count swing ──
+  if(prev){
+    const delta = snap.negCount - prev.negCount;
+    if(Math.abs(delta) >= 20){
+      stories.push({
+        icon: delta>0?'🔴':'🟢',
+        headline: (delta>0?'+'+delta+' more':Math.abs(delta)+' fewer')+' negative-price nodes this interval',
+        detail: snap.negCount+' total negative nodes (was '+prev.negCount+'). System avg: $'+snap.avgLmp.toFixed(2),
+        severity: Math.abs(delta)>=50?'high':'med'
+      });
+    }
+  }
+
+  // ── Session extremes ──
+  if(sessionSnapshots.length >= 2){
+    const prevHigh = sessionSnapshots.slice(0,-1).reduce((m,s)=>s.maxLmp>m?s.maxLmp:m,-Infinity);
+    const prevLow  = sessionSnapshots.slice(0,-1).reduce((m,s)=>s.minLmp<m?s.minLmp:m,Infinity);
+    if(snap.maxLmp > prevHigh+0.01){
+      const topRow = [...data].sort((a,b)=>b.lmp-a.lmp)[0];
+      stories.push({
+        icon:'🏆', headline:'New session high: $'+snap.maxLmp.toFixed(2)+' at '+topRow.sl,
+        detail:'Previous session high was $'+prevHigh.toFixed(2),
+        severity:'med'
+      });
+    }
+    if(snap.minLmp < prevLow-0.01){
+      const botRow = [...data].sort((a,b)=>a.lmp-b.lmp)[0];
+      stories.push({
+        icon:'🔻', headline:'New session low: $'+snap.minLmp.toFixed(2)+' at '+botRow.sl,
+        detail:'Previous session low was $'+prevLow.toFixed(2),
+        severity: snap.minLmp < -20 ? 'high' : 'med'
+      });
+    }
+  }
+
+  // ── Constraint emergence / resolution ──
+  const curPaths = detectConstrainedPaths(data);
+  const curKeys = new Set(curPaths.map(p=>p.from+'→'+p.to));
+  const prevKeys = new Set(prevConstrainedPaths);
+  curKeys.forEach(k=>{
+    if(!prevKeys.has(k)){
+      const p = curPaths.find(x=>x.from+'→'+x.to===k);
+      stories.push({
+        icon:'⚠️', headline:'Constraint emerged: '+k+' interface',
+        detail:'MCC wedge $'+p.wedge.toFixed(1)+' | '+p.from+' avg MCC $'+p.fromMcc.toFixed(1)+' | '+p.to+' avg MCC $'+p.toMcc.toFixed(1),
+        severity: p.wedge>20?'high':'med'
+      });
+    }
+  });
+  prevKeys.forEach(k=>{
+    if(!curKeys.has(k)){
+      stories.push({
+        icon:'✅', headline:'Constraint resolved: '+k+' interface',
+        detail:'Path no longer shows significant MCC differential this interval',
+        severity:'low'
+      });
+    }
+  });
+  prevConstrainedPaths = [...curKeys];
+
+  // ── MCC persistence milestones ──
+  const milestones = [6,12,24,36];
+  Object.entries(mccPersist).forEach(([sl,d])=>{
+    if(milestones.includes(d.negCount)){
+      stories.push({
+        icon:'🔒', headline:sl+' has been constrained for '+d.negCount+' consecutive intervals',
+        detail:'Avg MCC: $'+d.mcc.toFixed(2)+' | LMP: $'+d.lmp.toFixed(2)+' | ~'+(d.negCount*5)+' minutes',
+        severity: d.negCount>=12?'high':'med'
+      });
+    }
+  });
+
+  // ── Watched location swings ──
+  watchedSls.forEach(sl=>{
+    const hist = watchHistory[sl];
+    if(!hist||hist.length<2) return;
+    const cur = hist[hist.length-1], prv = hist[hist.length-2];
+    const delta = cur.lmp - prv.lmp;
+    if(Math.abs(delta)>=10){
+      stories.push({
+        icon:'⭐', headline:'[Watched] '+sl+' moved $'+(delta>=0?'+':'')+delta.toFixed(2),
+        detail:'$'+prv.lmp.toFixed(2)+' → $'+cur.lmp.toFixed(2)+' | MCC: $'+cur.mcc.toFixed(2),
+        severity:'watch'
+      });
+    }
+  });
+
+  // Add all to global feed (newest first)
+  stories.forEach(s=>{ s.interval=snap.interval; s.ts=snap.ts; });
+  sessionStories.unshift(...stories);
+  // Cap at 100 stories
+  if(sessionStories.length>100) sessionStories.length=100;
+}
+
+function detectConstrainedPaths(data){
+  const ZONES=['CSWS','NPPD','WFEC','SPS','WAUE','SECI','WERE','CLEC','MIDW','OTHER'];
+  const byZone={};
+  ZONES.forEach(z=>byZone[z]=[]);
+  data.forEach(r=>{const z=getZone(r.sl);if(byZone[z])byZone[z].push(r);});
+  const activeZones=ZONES.filter(z=>byZone[z].length>0);
+  const zStats={};
+  activeZones.forEach(z=>{
+    const rows=byZone[z];
+    zStats[z]={avgMcc:rows.reduce((s,r)=>s+r.mcc,0)/rows.length, avgLmp:rows.reduce((s,r)=>s+r.lmp,0)/rows.length};
+  });
+  const paths=[];
+  for(let i=0;i<activeZones.length;i++) for(let j=0;j<activeZones.length;j++){
+    if(i===j) continue;
+    const zA=activeZones[i],zB=activeZones[j];
+    const sA=zStats[zA],sB=zStats[zB];
+    if(sA.avgMcc<-2&&sB.avgMcc>2){
+      const wedge=Math.abs(sA.avgMcc)+sB.avgMcc;
+      const spread=sB.avgLmp-sA.avgLmp;
+      if(spread>3||wedge>8) paths.push({from:zA,to:zB,wedge,fromMcc:sA.avgMcc,toMcc:sB.avgMcc});
+    }
+  }
+  return paths.sort((a,b)=>b.wedge-a.wedge);
+}
+
+// ── renderSession ──────────────────────────────────────────────────────────
+function renderSession(){
+  const content = document.getElementById('content');
+  document.getElementById('ts').innerHTML = '<span class="badge">Session History</span>&nbsp;&nbsp;'+sessionSnapshots.length+' intervals captured&nbsp;&nbsp;|&nbsp;&nbsp;'+new Date().toLocaleTimeString();
+
+  if(!sessionSnapshots.length){
+    content.innerHTML='<div class="session-panel"><div class="signal-empty">📈 No session data yet.<br>Fetch RTBM data to start capturing history.</div></div>';
+    return;
+  }
+
+  const latest = sessionSnapshots[sessionSnapshots.length-1];
+
+  // ── Stats bar ──
+  const elapsed = Math.round((Date.now() - sessionSnapshots[0].ts)/60000);
+  const statsBar =
+    '<div class="session-stats">'+
+    '<span class="session-stat"><span class="session-stat-label">INTERVALS</span><span class="session-stat-val">'+sessionSnapshots.length+'</span></span>'+
+    '<span class="session-stat"><span class="session-stat-label">SESSION</span><span class="session-stat-val">~'+elapsed+'m</span></span>'+
+    (sessionHigh?'<span class="session-stat"><span class="session-stat-label">SESSION HIGH</span><span class="session-stat-val" style="color:var(--positive)">$'+sessionHigh.lmp.toFixed(2)+'</span><span style="font-family:\'IBM Plex Mono\',monospace;font-size:.68rem;color:var(--muted);margin-left:4px">'+sessionHigh.sl+'</span></span>':'')+
+    (sessionLow?'<span class="session-stat"><span class="session-stat-label">SESSION LOW</span><span class="session-stat-val" style="color:'+lmpColor(sessionLow.lmp)+'">$'+sessionLow.lmp.toFixed(2)+'</span><span style="font-family:\'IBM Plex Mono\',monospace;font-size:.68rem;color:var(--muted);margin-left:4px">'+sessionLow.sl+'</span></span>':'')+
+    '</div>';
+
+  // ── Signal feed ──
+  const feedItems = sessionStories.length
+    ? sessionStories.slice(0,30).map(s=>{
+        const t = new Date(s.ts).toLocaleTimeString();
+        return '<div class="signal-item signal-sev-'+s.severity+'">'+
+          '<div class="signal-icon">'+s.icon+'</div>'+
+          '<div class="signal-body">'+
+            '<div class="signal-time">'+s.interval+' CT &nbsp;·&nbsp; '+t+'</div>'+
+            '<div class="signal-headline">'+escH(s.headline)+'</div>'+
+            '<div class="signal-detail">'+escH(s.detail)+'</div>'+
+          '</div></div>';
+      }).join('')
+    : '<div class="signal-empty">No notable signals yet.<br>Signals appear as price swings, constraint changes, and session extremes are detected.</div>';
+
+  // ── Watched lines for trend chart ──
+  const hasWatch = watchedSls.size > 0 && Object.keys(watchHistory).some(sl=>watchHistory[sl]&&watchHistory[sl].length>=1);
+  const watchedActive = [...watchedSls].filter(sl=>watchHistory[sl]&&watchHistory[sl].length>=1);
+  const watchLegend = watchedActive.length
+    ? '<div style="display:flex;flex-wrap:wrap;gap:10px;padding:6px 14px 0;font-family:\'IBM Plex Mono\',monospace;font-size:.68rem;color:var(--muted)">'+
+        watchedActive.map((sl,i)=>'<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+COMPARE_COLORS[i%COMPARE_COLORS.length]+';margin-right:4px;vertical-align:middle"></span>'+escH(sl)+'</span>').join('')+
+      '</div>'
+    : '<div style="padding:6px 14px;font-family:\'IBM Plex Mono\',monospace;font-size:.68rem;color:var(--muted)">Watch locations on the RTBM tab to see them here.</div>';
+
+  // Export row
+  const exportRow =
+    '<div class="session-export-row">'+
+    '<button class="btn" style="padding:6px 14px;font-size:.75rem" onclick="exportSessionCSV()">↓ Export Session CSV</button>'+
+    '<span style="font-size:.72rem;color:var(--muted);font-family:\'IBM Plex Mono\',monospace;margin-left:8px">'+sessionSnapshots.length+' intervals × system summary + zone averages</span>'+
+    '</div>';
+
+  content.innerHTML =
+    '<div class="session-grid">'+
+
+    // Signal panel
+    '<div class="session-panel">'+
+      '<div class="session-hdr shdr-signal">📰 Latest Signals</div>'+
+      statsBar+
+      '<div class="signal-feed">'+feedItems+'</div>'+
+      exportRow+
+    '</div>'+
+
+    // System trend panel
+    '<div class="session-panel">'+
+      '<div class="session-hdr shdr-trend">📈 System Trend &nbsp;<span style="font-weight:400;opacity:.6;text-transform:none;font-size:.7rem">Avg LMP + watched locations + neg node count</span></div>'+
+      watchLegend+
+      '<div class="session-chart-wrap"><canvas id="sessionTrendChart"></canvas></div>'+
+    '</div>'+
+
+    '</div>';
+
+  // Build chart after DOM is ready
+  requestAnimationFrame(()=>{
+    buildSessionTrendChart();
+  });
+}
+
+
+function buildSessionTrendChart(){
+  if(sessionTrendChart){ sessionTrendChart.destroy(); sessionTrendChart=null; }
+  const ctx = document.getElementById('sessionTrendChart');
+  if(!ctx) return;
+
+  const labels = sessionSnapshots.map(s=>{
+    const raw = s.interval;
+    const m = raw.match(/(\d{2}:\d{2}:\d{2})/);
+    return m ? m[1] : raw;
+  });
+
+  const datasets = [
+    // Avg LMP - white line, primary axis
+    { label:'Avg LMP', data: sessionSnapshots.map(s=>s.avgLmp),
+      borderColor:'#e2e8f0', backgroundColor:'rgba(226,232,240,.06)',
+      borderWidth:2.5, pointRadius:2, tension:0.3, fill:true, yAxisID:'y' },
+    // Neg count - bar, secondary axis
+    { label:'Neg Nodes', data: sessionSnapshots.map(s=>s.negCount),
+      type:'bar', backgroundColor:'rgba(255,82,82,.25)', borderColor:'rgba(255,82,82,.6)',
+      borderWidth:1, yAxisID:'y2' },
+  ];
+
+  // Watched location lines
+  [...watchedSls].filter(sl=>watchHistory[sl]&&watchHistory[sl].length>=1).forEach((sl,i)=>{
+    const col = COMPARE_COLORS[i%COMPARE_COLORS.length];
+    const byInterval = {};
+    (watchHistory[sl]||[]).forEach(p=>byInterval[p.interval]=p.lmp);
+    datasets.push({
+      label: sl, data: sessionSnapshots.map(s=>byInterval[s.interval]??null),
+      borderColor: col, backgroundColor:'transparent',
+      borderWidth:1.5, pointRadius:2, tension:0.3, fill:false,
+      spanGaps:true, yAxisID:'y'
+    });
+  });
+
+  sessionTrendChart = new Chart(ctx, {
+    type:'line', data:{labels,datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#161920', borderColor:'#252b38', borderWidth:1,
+          titleColor:'#7a8499', bodyColor:'#dde3ed',
+          titleFont:{family:'IBM Plex Mono',size:10}, bodyFont:{family:'IBM Plex Mono',size:11},
+          callbacks:{label:c=>c.raw!==null?c.dataset.label+': '+(c.dataset.yAxisID==='y2'?c.raw+' nodes':'$'+Number(c.raw).toFixed(2)):null}
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#7a8499',font:{family:'IBM Plex Mono',size:9},maxTicksLimit:12},grid:{color:'#252b38'}},
+        y:{position:'left',ticks:{color:'#7a8499',font:{family:'IBM Plex Mono',size:10},callback:v=>'$'+v},grid:{color:'#252b38'}},
+        y2:{position:'right',ticks:{color:'rgba(255,82,82,.7)',font:{family:'IBM Plex Mono',size:9},callback:v=>v+'n'},grid:{drawOnChartArea:false}}
+      }
+    }
+  });
+}
+
+
+function exportSessionCSV(){
+  if(!sessionSnapshots.length) return;
+  const zones = Object.keys(ZONE_COLORS);
+  const hdr = ['Interval','Timestamp','AvgLMP','MaxLMP','MinLMP','NegNodes',...zones.map(z=>z+'_AvgLMP')].join(',');
+  const lines = sessionSnapshots.map(s=>[
+    s.interval, new Date(s.ts).toISOString(),
+    s.avgLmp.toFixed(4), s.maxLmp.toFixed(4), s.minLmp.toFixed(4), s.negCount,
+    ...zones.map(z=>s.zoneAvgs[z]!==null?s.zoneAvgs[z].toFixed(4):'')
+  ].join(','));
+  const blob = new Blob([hdr+'\n'+lines.join('\n')],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'SPP_Session_'+new Date().toISOString().slice(0,16).replace(':','-')+'.csv';
+  a.click();
+}
+// ─── END SESSION TAB ──────────────────────────────────────────────────────────
+
+function showLoading(){
+  ['statsRow','ts','rowCount'].forEach(id=>document.getElementById(id).innerHTML='');
+  document.getElementById('filterRow').style.display='none';
+  document.getElementById('content').innerHTML=`
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <div>Connecting to SPP…</div>
+      <div class="loading-msg" style="font-size:.72rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;max-width:320px;text-align:center;word-break:break-all"></div>
+      <div class="proxy-label">Trying: <em>${PROXY_NAMES[0]}</em></div>
+      <div class="pip-row">${PROXIES.map((_,i)=>'<div class="pip" id="pip'+i+'"></div>').join('')}</div>
+    </div>`;
+}
+
+function showUploadUI(errMsg){
+  ['statsRow','ts','rowCount'].forEach(id=>document.getElementById(id).innerHTML='');
+  document.getElementById('filterRow').style.display='none';
+  const csvUrl='https://portal.spp.org/file-browser-api/download/rtbm-lmp-by-location?path=/RTBM-LMP-SL-latestInterval.csv';
+  document.getElementById('content').innerHTML=`
+    <div class="upload-zone">
+      <h2>📡 Load SPP LMP Data</h2>
+      <p style="margin-bottom:18px;color:var(--muted);font-size:.88rem">${errMsg?'The proxies were blocked by SPP\'s server. ':''}Download the CSV from SPP\'s public portal, then load it here.</p>
+      <div class="step"><span class="step-num">1</span><span>Open this URL in your browser to download the latest file:<br><code>${csvUrl}</code></span></div>
+      <div class="step"><span class="step-num">2</span><span>Come back here and tap <strong>Browse File</strong> (or drag & drop) to load it instantly.</span></div>
+      <div class="dropbox"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor='var(--border)'"
+        ondrop="handleDrop(event)">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text"><strong>Drag & drop</strong> your CSV here<br><span style="font-size:.8rem">or tap the button below</span></div>
+        <button class="btn primary" style="font-size:.88rem;padding:11px 24px" onclick="document.getElementById('fp').click()">📁 &nbsp;Browse File…</button>
+        <input type="file" id="fp" accept=".csv" style="display:none" onchange="handleFilePick(event)">
+      </div>
+    </div>`;
+}
+
+function loadFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{ try{ parseAndRender(ev.target.result,'Loaded: '+file.name); }catch(e){ alert('Parse error: '+e.message); }};
+  reader.readAsText(file);
+}
+function handleDrop(e){ e.preventDefault(); loadFile(e.dataTransfer.files[0]); }
+function handleFilePick(e){ loadFile(e.target.files[0]); e.target.value=''; }
+
+function setStatus(state,text){ document.getElementById('dot').className='dot '+state; document.getElementById('stxt').textContent=text; }
+
+function toggleAuto(){
+  autoOn=!autoOn;
+  const btn=document.getElementById('autoBtn');
+  if(autoOn){ btn.textContent='Auto-Refresh: On (5m)'; btn.className='btn auto-on'; autoTimer=setInterval(fetchData,5*60*1000); fetchData(); }
+  else{ btn.textContent='Auto-Refresh: Off'; btn.className='btn'; clearInterval(autoTimer); }
+}
+
+function downloadCSV(){
+  if(!allData.length){ alert('Load data first.'); return; }
+  const h='Settlement Location,Pnode,LMP,MEC,MCC,MLC,Interval';
+  const rows=allData.map(r=>[r.sl,r.pnode,r.lmp,r.mec,r.mcc,r.mlc,r.interval].join(','));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([[h,...rows].join('\n')],{type:'text/csv'}));
+  a.download=`SPP_LMP_${new Date().toISOString().slice(0,16).replace(':','-')}.csv`;
+  a.click();
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  DA LMP STORE
+//  daStore[settlementLocation] = { "01:00": 24.33, "02:00": 18.1, ... }
+//  Keys are hour-ending in CT, zero-padded: "01:00".."24:00"
+// ═══════════════════════════════════════════════════════════
+let daStore = {};          // filled once per day
+let daLoadedDate = null;   // YYYYMMDD string
+let daChart = null;        // Chart.js instance
+
+// Build today's DA file URL  (CT date = SPP operating day)
+function getDaUrl(){
+  const ct = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}));
+  const y  = ct.getFullYear();
+  const m  = String(ct.getMonth()+1).padStart(2,'0');
+  const d  = String(ct.getDate()).padStart(2,'0');
+  const url = `${BASE}/da-lmp-by-location?path=/${y}/${m}/By_Day/DA-LMP-SL-${y}${m}${d}0100.csv`;
+  return { url, dateKey:`${y}${m}${d}` };
+}
+
+// DA uses a separate wider proxy list — corsproxy.io blocks the DA endpoint with 404
+// so we try a completely different set of proxies
+const DA_PROXIES = [
+  u => `${CF_WORKER}?url=${encodeURIComponent(u)}&_=${Date.now()}`,
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}&_=${Date.now()}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}&t=${Date.now()}`,
+  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+];
+const DA_PROXY_NAMES = ['CF-Worker','corsproxy.io','allorigins.win','codetabs.com'];
+
+// Parse a DA CSV into daStore
+function parseDaCSV(csv){
+  const lines = csv.trim().split(/\r?\n/);
+  if(lines.length < 2) return 0;
+  const hdrs = lines[0].split(',').map(h=>h.trim().toLowerCase());
+  const iCol = hdrs.indexOf('interval');
+  const slCol = hdrs.findIndex(h=>h.includes('settlement') && h.includes('location'));
+  const lmpCol = hdrs.indexOf('lmp');
+  if(iCol<0||slCol<0||lmpCol<0) return 0;
+
+  const store = {};
+  for(let i=1;i<lines.length;i++){
+    const v = lines[i].split(',').map(x=>x.trim().replace(/"/g,''));
+    if(!v[slCol]) continue;
+    const sl  = v[slCol];
+    const lmp = parseFloat(v[lmpCol]);
+    // Interval is like "03/07/2026 08:00:00" — extract HH:MM as hour-ending key
+    const raw = v[iCol]||'';
+    const tPart = raw.split(' ')[1]||'';          // "08:00:00"
+    const hKey  = tPart.slice(0,5);               // "08:00"
+    if(!store[sl]) store[sl] = {};
+    store[sl][hKey] = lmp;
+  }
+  return store;
+}
+
+// Fetch DA file — only once per operating day
+async function ensureDaLoaded(){
+  const { url, dateKey } = getDaUrl();
+  if(daLoadedDate === dateKey && Object.keys(daStore).length > 0){
+    dbLog('DA data already loaded for today', 'info');
+    return true;
+  }
+  dbLog('Fetching DA LMP file…', 'info');
+  updateDaStatusBar('loading');
+
+  // DA file is ~1MB — try proxies serially starting with corsproxy.io (most reliable)
+  // Use a longer timeout since it's a big file (~30k rows)
+  const DA_TIMEOUT = 60000;
+  for(let i = 0; i < DA_PROXIES.length; i++){
+    dbLog(`DA trying ${DA_PROXY_NAMES[i]}…`, 'info');
+    try{
+      const proxyUrl = DA_PROXIES[i](url);
+      const r = await fetchWithTimeout(proxyUrl, DA_TIMEOUT);
+      dbLog(`DA ${DA_PROXY_NAMES[i]} response: HTTP ${r.status}`, r.ok ? 'info' : 'fail');
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const csv = await r.text();
+      dbLog(`DA ${DA_PROXY_NAMES[i]} got ${Math.round(csv.length/1024)}KB`, 'info');
+      if(!csv || csv.trim().startsWith('<!')) throw new Error('got HTML not CSV');
+      if(!csv.includes('Settlement Location') && !csv.includes('settlement location')) throw new Error('not a valid LMP CSV');
+      dbLog(`DA downloaded via ${DA_PROXY_NAMES[i]} (${Math.round(csv.length/1024)}KB)`, 'ok');
+
+      const parsed = parseDaCSV(csv);
+      const count  = Object.keys(parsed).length;
+      if(count === 0) throw new Error('parse returned 0 locations');
+
+      daStore      = parsed;
+      daLoadedDate = dateKey;
+      try{ daTabData = parseCSVToRows(csv); }catch(e){ daTabData = []; }
+      dbLog(`DA loaded: ${count} locations x 24 hours`, 'ok');
+      updateDaStatusBar('loaded', count);
+      // If user is on DA tab, render it now
+      if(tab === 'da' && daTabData.length) renderTableFull();
+      return true;
+    }catch(e){
+      dbLog(`DA ${DA_PROXY_NAMES[i]} FAILED: ${e.message}`, 'fail');
+    }
+  }
+
+  dbLog('DA fetch failed — all proxies blocked', 'fail');
+  updateDaStatusBar('failed');
+  return false;
+}
+
+function updateDaStatusBar(state, count){
+  const el = document.getElementById('daStatusBar');
+  if(!el) return;
+  if(state==='loading'){
+    el.style.display='block';
+    el.innerHTML='⟳ Loading DA LMP data for today…';
+  } else if(state==='loaded'){
+    el.style.display='block';
+    el.innerHTML=`✓ DA LMP loaded — ${count} locations | Click any row to compare RT vs DA`;
+  } else if(state==='failed'){
+    el.style.display='block';
+    el.style.background='rgba(255,112,67,.06)';
+    el.style.borderColor='rgba(255,112,67,.2)';
+    el.style.color='var(--orange)';
+    el.innerHTML='⚠ DA LMP file could not be loaded — RT vs DA comparison unavailable';
+  } else {
+    el.style.display='none';
+  }
+}
+
+// Get the current CT hour-ending key from an RTBM interval string
+// e.g. "03/07/2026 08:20:00" → hour ending = 09:00 → "09:00"
+// Special case: xx:00:00 already on the hour → same hour ending
+function getHourEndingKey(intervalStr){
+  if(!intervalStr) return null;
+  const tPart = intervalStr.split(' ')[1]||'';     // "08:20:00"
+  const parts  = tPart.split(':');
+  let h = parseInt(parts[0]||0);
+  const m = parseInt(parts[1]||0);
+  // If minutes > 0, hour-ending is h+1; if exactly on the hour, it's h
+  if(m > 0) h = h + 1;
+  if(h > 23) h = 0;  // midnight rollover — DA key would be "00:00" but SPP uses 24:00 convention
+  return String(h).padStart(2,'0') + ':00';
+}
+
+// ── MODAL ──────────────────────────────────────────────────
+function openModal(sl, rtLmp, rtInterval){
+  const overlay = document.getElementById('modalOverlay');
+  const hourKey = getHourEndingKey(rtInterval);
+
+  // KPI: RT
+  const kpiRT = document.getElementById('kpiRT');
+  kpiRT.textContent = '$' + rtLmp.toFixed(2);
+  kpiRT.className = 'modal-kpi-val';
+  kpiRT.style.color = lmpColor(rtLmp);
+
+  // KPI: DA
+  const daLmp = (daStore[sl] && hourKey) ? daStore[sl][hourKey] : null;
+  const kpiDA  = document.getElementById('kpiDA');
+  const kpiSpread = document.getElementById('kpiSpread');
+
+  if(daLmp !== undefined && daLmp !== null){
+    kpiDA.textContent = '$' + daLmp.toFixed(2);
+    kpiDA.className = 'modal-kpi-val';
+    kpiDA.style.color = lmpColor(daLmp);
+    const spread = rtLmp - daLmp;
+    kpiSpread.textContent = (spread >= 0 ? '+' : '') + '$' + spread.toFixed(2);
+    kpiSpread.className = 'modal-kpi-val';
+    kpiSpread.style.color = lmpColor(spread);
+    document.getElementById('daLoadNote').textContent = '';
+  } else {
+    kpiDA.textContent = 'N/A';
+    kpiDA.style.color = '';
+    kpiSpread.textContent = 'N/A';
+    kpiSpread.className = 'modal-kpi-val';
+    kpiSpread.style.color = '';
+    document.getElementById('daLoadNote').textContent = daLoadedDate ? 'No DA data for this location.' : 'DA file not loaded yet.';
+  }
+
+  // Title + watch toggle
+  const isWatched = watchedSls.has(sl);
+  document.getElementById('modalTitle').innerHTML =
+    escH(sl) +
+    '&nbsp;<button onclick="toggleWatchFromModal(\''+escH(sl)+'\')" id="modalWatchBtn" style="background:none;border:1px solid '+(isWatched?'#ffd54f':'var(--border)')+';border-radius:4px;padding:2px 10px;font-size:.72rem;font-family:\'IBM Plex Mono\',monospace;cursor:pointer;color:'+(isWatched?'#ffd54f':'var(--muted)')+';">'+(isWatched?'★ Watching':'☆ Watch')+'</button>';
+  document.getElementById('modalSub').textContent =
+    'RT interval: ' + (rtInterval||'—') + ' CT' +
+    (hourKey ? '  |  DA hour-ending: ' + hourKey + ' CT' : '');
+
+  // Chart
+  buildDaChart(sl, rtLmp, rtInterval, hourKey);
+
+  overlay.classList.remove('hidden');
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.add('hidden');
+}
+
+function toggleWatchFromModal(sl){
+  if(watchedSls.has(sl)){
+    watchedSls.delete(sl);
+  } else {
+    watchedSls.add(sl);
+    backfillWatchHistory(sl);
+  }
+  const btn = document.getElementById('modalWatchBtn');
+  const isW = watchedSls.has(sl);
+  if(btn){
+    btn.textContent = isW ? '★ Watching' : '☆ Watch';
+    btn.style.color = isW ? '#ffd54f' : 'var(--muted)';
+    btn.style.borderColor = isW ? '#ffd54f' : 'var(--border)';
+  }
+  updateWatchPanel();
+  const expBtn = document.getElementById('exportSelectedBtn');
+  if(expBtn) expBtn.classList.toggle('visible', watchedSls.size > 0);
+  if(tab==='rtbm' && allData.length) renderTable();
+}
+
+function buildDaChart(sl, rtLmp, rtInterval, hourKey){
+  const ctx = document.getElementById('daChart').getContext('2d');
+  if(daChart){ daChart.destroy(); daChart = null; }
+
+  const hoursOrdered = [
+    '01:00','02:00','03:00','04:00','05:00','06:00',
+    '07:00','08:00','09:00','10:00','11:00','12:00',
+    '13:00','14:00','15:00','16:00','17:00','18:00',
+    '19:00','20:00','21:00','22:00','23:00','00:00'
+  ];
+  const labels = hoursOrdered.map((h,i)=> (i===23 ? '24:00' : h) );
+
+  const daValues = hoursOrdered.map(h => {
+    if(!daStore[sl]) return null;
+    const v = daStore[sl][h];
+    return (v !== undefined) ? v : null;
+  });
+
+  // RT dot — place at the correct hour index
+  const rtDots = hoursOrdered.map(h => h === hourKey ? rtLmp : null);
+
+  daChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'DA LMP',
+          data: daValues,
+          borderColor: '#69f0ae',
+          backgroundColor: 'rgba(105,240,174,.08)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          tension: 0.3,
+          fill: true,
+          spanGaps: true,
+        },
+        {
+          label: 'RT LMP',
+          data: rtDots,
+          borderColor: '#ff5252',
+          backgroundColor: '#ff5252',
+          borderWidth: 0,
+          pointRadius: rtDots.map(v => v !== null ? 5 : 0),
+          pointHoverRadius: 7,
+          pointStyle: 'circle',
+          showLine: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161920',
+          borderColor: '#252b38',
+          borderWidth: 1,
+          titleColor: '#7a8499',
+          bodyColor: '#dde3ed',
+          titleFont: { family:'IBM Plex Mono', size:11 },
+          bodyFont: { family:'IBM Plex Mono', size:12 },
+          callbacks: {
+            label: ctx => {
+              if(ctx.raw === null) return null;
+              return ctx.dataset.label + ': $' + ctx.raw.toFixed(2);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color:'#7a8499', font:{family:'IBM Plex Mono',size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 },
+          grid:  { color:'rgba(255,255,255,.05)' }
+        },
+        y: {
+          ticks: { color:'#7a8499', font:{family:'IBM Plex Mono',size:10}, callback: v=>'$'+v.toFixed(0) },
+          grid:  { color:'rgba(255,255,255,.05)' }
+        }
+      }
+    }
+  });
+}
+
+// Wire up click handlers after table renders (called from renderTable)
+function wireTableClicks(){
+  if(tab !== 'rtbm' || !rtbmData.length) return;
+  const visRows = getVisibleRows();
+  document.querySelectorAll('#content tbody tr').forEach((tr, idx) => {
+    tr.classList.add('clickable');
+    tr.addEventListener('click', (e) => {
+      if(e.target.classList.contains('star-btn')) return; // star handled separately
+      const row = visRows[idx];
+      if(!row) return;
+      openModal(row.sl, row.lmp, row.interval);
+    });
+  });
+}
+
+function getVisibleRows(){
+  return getFilteredSortedRows();
+}
+
+
+// ── WATCH LIST ────────────────────────────────────────────────────────────────
+function backfillWatchHistory(sl){
+  // Seed watch history from all already-captured snapshots using current rtbmData
+  // (we only have one interval of raw data in memory, but we seed it for every
+  // snapshot interval that matches, plus any future fetches will append normally)
+  if(!rtbmData.length) return;
+  const row = rtbmData.find(r=>r.sl===sl);
+  if(!row) return;
+  if(!watchHistory[sl]) watchHistory[sl]=[];
+  // Backfill one point per captured snapshot using the current lmp value
+  // (best we can do — future fetches will build the real history forward)
+  sessionSnapshots.forEach(snap=>{
+    const already = watchHistory[sl].some(p=>p.interval===snap.interval);
+    if(!already){
+      const hr = getHourEndingKey(snap.interval);
+      const daLmp = daStore[sl]&&hr ? daStore[sl][hr] : null;
+      const spread = daLmp!==null ? row.lmp - daLmp : null;
+      watchHistory[sl].push({interval:snap.interval, ts:snap.ts, lmp:row.lmp, mcc:row.mcc, spread});
+    }
+  });
+  // Sort by interval
+  watchHistory[sl].sort((a,b)=>a.interval.localeCompare(b.interval));
+}
+
+function toggleWatch(sl, e){
+  e.stopPropagation();
+  if(watchedSls.has(sl)){
+    watchedSls.delete(sl);
+  } else {
+    watchedSls.add(sl);
+    backfillWatchHistory(sl);
+  }
+  updateWatchPanel();
+  renderTable();
+  const btn = document.getElementById('exportSelectedBtn');
+  if(btn) btn.classList.toggle('visible', watchedSls.size > 0);
+}
+
+function clearWatched(){
+  watchedSls.clear();
+  updateWatchPanel();
+  renderTable();
+  const btn = document.getElementById('exportSelectedBtn');
+  if(btn) btn.classList.remove('visible');
+}
+
+function updateWatchPanel(){
+  const panel = document.getElementById('watchPanel');
+  const rowsEl = document.getElementById('watchRows');
+  if(!panel || !rowsEl) return;
+
+  if(watchedSls.size === 0){
+    panel.classList.remove('visible');
+    return;
+  }
+  panel.classList.add('visible');
+
+  // Update compare button state
+  const cmpBtn = document.getElementById('compareBtn');
+  if(cmpBtn) cmpBtn.style.opacity = watchedSls.size >= 2 ? '1' : '0.4';
+
+  rowsEl.innerHTML = [...watchedSls].map(sl => {
+    const row = rtbmData.find(r => r.sl === sl);
+    const lmp = row ? row.lmp : null;
+    const daLmp = (daStore[sl]) ? (() => {
+      const hr = rtbmData[0] ? getHourEndingKey(rtbmData[0].interval) : null;
+      return hr ? daStore[sl][hr] : null;
+    })() : null;
+    const spread = (lmp !== null && daLmp !== null) ? lmp - daLmp : null;
+    const spreadFiring = spreadAlertThreshold !== null && spread !== null && Math.abs(spread) >= spreadAlertThreshold;
+
+    return '<div class="watch-card">' +
+      '<button class="watch-card-remove" onclick="toggleWatch(\''+escH(sl)+'\',event)" title="Remove">✕</button>' +
+      '<div class="watch-card-name" title="'+escH(sl)+'">'+escH(sl)+'</div>' +
+      (lmp !== null
+        ? '<div class="watch-card-lmp" style="color:'+lmpColor(lmp)+'">$'+lmp.toFixed(2)+'</div>'
+        : '<div class="watch-card-lmp" style="color:var(--muted)">—</div>') +
+      (spread !== null
+        ? '<div class="watch-card-spread">RT−DA: <span style="color:'+lmpColor(spread)+'">'+(spread>=0?'+':'')+'$'+spread.toFixed(2)+'</span></div>'
+        : '<div class="watch-card-spread" style="color:var(--muted)">RT−DA: load DA</div>') +
+      '<div class="watch-card-alert'+(spreadFiring?' firing':'')+'">⚡ Spread alert!</div>' +
+    '</div>';
+  }).join('');
+}
+
+function saveSpreadAlert(){
+  const v = parseFloat(document.getElementById('spreadAlertInput').value);
+  spreadAlertThreshold = isNaN(v) ? null : Math.abs(v);
+  const el = document.getElementById('spreadAlertStatus');
+  if(el) el.textContent = spreadAlertThreshold !== null ? 'Alert: |spread| ≥ $'+spreadAlertThreshold : 'No spread alert set.';
+}
+
+function clearSpreadAlert(){
+  spreadAlertThreshold = null;
+  const inp = document.getElementById('spreadAlertInput');
+  if(inp) inp.value = '';
+  const el = document.getElementById('spreadAlertStatus');
+  if(el) el.textContent = 'Cleared.';
+}
+
+function checkSpreadAlerts(){
+  if(spreadAlertThreshold === null || watchedSls.size === 0) return;
+  const msgs = [];
+  watchedSls.forEach(sl => {
+    const row = rtbmData.find(r => r.sl === sl);
+    if(!row) return;
+    const hr = getHourEndingKey(row.interval);
+    const daLmp = daStore[sl] && hr ? daStore[sl][hr] : null;
+    if(daLmp === null) return;
+    const spread = row.lmp - daLmp;
+    if(Math.abs(spread) >= spreadAlertThreshold){
+      msgs.push('⚡ '+sl+' RT−DA spread = '+(spread>=0?'+':'')+'$'+spread.toFixed(2));
+    }
+  });
+  if(msgs.length){
+    document.getElementById('alertBannerText').textContent = msgs.join('  |  ');
+    document.getElementById('alertBanner').classList.add('visible');
+    playChime();
+  }
+}
+
+// ── COMPARE MODAL ─────────────────────────────────────────────────────────────
+let compareChartInst = null;
+const COMPARE_COLORS = ['#69f0ae','#ff5252','#ffd54f','#80deea','#ce93d8','#ffcc80','#a5d6a7','#ef9a9a'];
+
+function openCompareModal(){
+  if(watchedSls.size < 2){ return; }
+  const sls = [...watchedSls];
+  document.getElementById('compareTitle').textContent = 'Compare: '+sls.length+' Locations';
+  document.getElementById('compareSub').textContent = 'DA hourly LMP curves + current RT interval dots';
+
+  // KPI cards
+  const kpiGrid = document.getElementById('compareKpiGrid');
+  kpiGrid.innerHTML = sls.map((sl,i) => {
+    const row = rtbmData.find(r => r.sl === sl);
+    const lmp = row ? row.lmp : null;
+    const hr = row ? getHourEndingKey(row.interval) : null;
+    const daLmp = (daStore[sl] && hr) ? daStore[sl][hr] : null;
+    const spread = (lmp !== null && daLmp !== null) ? lmp - daLmp : null;
+    const col = COMPARE_COLORS[i % COMPARE_COLORS.length];
+    return '<div class="modal-kpi" style="border-color:'+col+'44">' +
+      '<div class="modal-kpi-label" style="color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+escH(sl)+'">'+escH(sl)+'</div>' +
+      '<div style="font-size:1rem;font-weight:700;font-family:\'IBM Plex Mono\',monospace;color:'+(lmp!==null?lmpColor(lmp):'var(--muted)')+'">'+
+        (lmp!==null?'$'+lmp.toFixed(2):'—')+'</div>' +
+      '<div style="font-size:.7rem;color:var(--muted);font-family:\'IBM Plex Mono\',monospace;margin-top:2px">'+
+        'DA: '+(daLmp!==null?'$'+daLmp.toFixed(2):'—')+'&nbsp;&nbsp;Δ: '+(spread!==null?((spread>=0?'+':'')+'$'+spread.toFixed(2)):'—')+'</div>' +
+    '</div>';
+  }).join('');
+
+  // Build DA chart datasets
+  const allHours = new Set();
+  sls.forEach(sl => { if(daStore[sl]) Object.keys(daStore[sl]).forEach(h => allHours.add(h)); });
+  const labels = [...allHours].sort();
+
+  const datasets = sls.map((sl, i) => {
+    const col = COMPARE_COLORS[i % COMPARE_COLORS.length];
+    const daVals = labels.map(h => daStore[sl] ? (daStore[sl][h] ?? null) : null);
+    const rtRow = rtbmData.find(r => r.sl === sl);
+    const rtDots = labels.map(h => {
+      if(!rtRow) return null;
+      const rtHr = getHourEndingKey(rtRow.interval);
+      return h === rtHr ? rtRow.lmp : null;
+    });
+    return [
+      { label: sl+' DA', data: daVals, borderColor: col, backgroundColor: col+'15',
+        borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.3, fill: false, spanGaps: true },
+      { label: sl+' RT', data: rtDots, borderColor: col, backgroundColor: col,
+        borderWidth: 0, pointRadius: rtDots.map(v=>v!==null?5:0), pointHoverRadius: 7,
+        showLine: false, pointStyle: 'circle' }
+    ];
+  }).flat();
+
+  // Legend
+  document.getElementById('compareLegend').innerHTML = sls.map((sl,i) =>
+    '<span><span class="legend-dot" style="background:'+COMPARE_COLORS[i % COMPARE_COLORS.length]+'"></span>'+escH(sl)+'</span>'
+  ).join('');
+
+  // Chart
+  if(compareChartInst){ compareChartInst.destroy(); compareChartInst=null; }
+  const ctx = document.getElementById('compareChart').getContext('2d');
+  compareChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor:'#161920', borderColor:'#252b38', borderWidth:1,
+          titleColor:'#7a8499', bodyColor:'#dde3ed',
+          titleFont:{family:'IBM Plex Mono',size:11}, bodyFont:{family:'IBM Plex Mono',size:11},
+          filter: item => item.raw !== null,
+          callbacks: { label: ctx => ctx.raw!==null ? ctx.dataset.label+': $'+ctx.raw.toFixed(2) : null }
+        }
+      },
+      scales: {
+        x: { ticks:{color:'#7a8499',font:{family:'IBM Plex Mono',size:10}}, grid:{color:'#252b38'} },
+        y: { ticks:{color:'#7a8499',font:{family:'IBM Plex Mono',size:10},callback:v=>'$'+v}, grid:{color:'#252b38'} }
+      }
+    }
+  });
+
+  document.getElementById('compareOverlay').classList.remove('hidden');
+}
+
+function closeCompareModal(){
+  document.getElementById('compareOverlay').classList.add('hidden');
+  if(compareChartInst){ compareChartInst.destroy(); compareChartInst=null; }
+}
+
+// ── EXPORT SELECTED ───────────────────────────────────────────────────────────
+function downloadSelectedCSV(){
+  if(!watchedSls.size){ return; }
+  const rows = rtbmData.filter(r => watchedSls.has(r.sl));
+  const hdr = 'Interval,SettlementLocation,Pnode,LMP,MCC,MEC,MLC';
+  const lines = rows.map(r => [r.interval,r.sl,r.pnode,r.lmp,r.mcc,r.mec,r.mlc].join(','));
+  const blob = new Blob([hdr+'\n'+lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'SPP_LMP_Selected_'+new Date().toISOString().slice(0,16).replace(':','-')+'.csv';
+  a.click();
+}
+
+// On load: show upload UI immediately instead of triggering failed proxies
+showUploadUI();
+</script>
+
+<!-- DA Comparison Modal -->
+<div class="modal-overlay hidden" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modalTitle">—</div>
+    <div class="modal-sub" id="modalSub">—</div>
+    <div class="modal-kpi-row">
+      <div class="modal-kpi">
+        <div class="modal-kpi-label">RT LMP (now)</div>
+        <div class="modal-kpi-val kv-rt" id="kpiRT">—</div>
+      </div>
+      <div class="modal-kpi">
+        <div class="modal-kpi-label">DA LMP (this hr)</div>
+        <div class="modal-kpi-val kv-da" id="kpiDA">—</div>
+      </div>
+      <div class="modal-kpi">
+        <div class="modal-kpi-label">RT − DA Spread</div>
+        <div class="modal-kpi-val" id="kpiSpread">—</div>
+      </div>
+    </div>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:#69f0ae"></span>DA Hourly LMP</span>
+      <span><span class="legend-dot" style="background:#ff5252"></span>RT LMP (current interval)</span>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="daChart"></canvas>
+    </div>
+    <div id="daLoadNote" class="da-loading"></div>
+  </div>
+</div>
+</body>
+</html>
