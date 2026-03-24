@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPP Live Market Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+  :root{--bg:#0a0e17;--bg2:#0f1420;--card:#151b2b;--card2:#1a2136;--input:#111827;--bdr:#1e293b;--t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--blue:#3b82f6;--cyan:#06b6d4;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--pink:#ec4899;--r:8px;--r2:12px;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;overflow:hidden;}
+  .header{background:linear-gradient(135deg,var(--bg2),#111a2e);border-bottom:1px solid var(--bdr);padding:12px 20px;display:flex;align-items:center;gap:12px;z-index:1000;position:relative;}
+  .header-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--blue),var(--cyan));border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 0 14px rgba(59,130,246,0.3);}
+  .header h1{font-size:16px;font-weight:700;background:linear-gradient(90deg,#e2e8f0,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .header p{font-size:10px;color:var(--t3);margin-top:1px;}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .status{font-size:10px;color:var(--t3);display:flex;align-items:center;gap:5px;}
+  .status .dot{width:6px;height:6px;border-radius:50%;}
+  .status .dot.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;}
+  .status .dot.loading{background:var(--amber);animation:pulse 1s infinite;}
+  .status .dot.error{background:var(--red);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+  .refresh-btn{padding:5px 12px;border:1px solid var(--bdr);border-radius:var(--r);background:var(--input);color:var(--t2);font-size:10px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;}
+  .refresh-btn:hover{border-color:var(--blue);color:var(--blue);}
+  #map{width:100%;height:calc(100vh - 88px);background:var(--bg);}
+  .legend{position:absolute;bottom:20px;left:14px;z-index:1000;background:rgba(15,20,32,0.93);border:1px solid var(--bdr);border-radius:var(--r2);padding:12px 14px;backdrop-filter:blur(10px);max-width:250px;max-height:calc(100vh - 120px);overflow-y:auto;}
+  .leg-t{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin:8px 0 4px;} .leg-t:first-child{margin-top:0;}
+  .leg-i{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:var(--t2);margin-bottom:3px;}
+  .leg-i input{accent-color:var(--blue);width:13px;height:13px;flex-shrink:0;}
+  .leg-d{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+  .leg-c{width:8px;height:8px;border-radius:50%;flex-shrink:0;border:1.5px solid #fff;}
+  .leg-l{width:14px;height:2px;border-radius:1px;flex-shrink:0;}
+  .leg-g{height:8px;width:16px;border-radius:2px;flex-shrink:0;}
+  .mcp-panel{position:absolute;top:14px;right:14px;z-index:1000;background:rgba(15,20,32,0.93);border:1px solid var(--bdr);border-radius:var(--r2);padding:12px;min-width:270px;backdrop-filter:blur(10px);}
+  .mcp-title{font-size:11px;font-weight:700;color:var(--cyan);margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+  .mcp-title .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);}
+  .mcp-time{font-size:9px;color:var(--t3);margin-bottom:8px;font-family:'JetBrains Mono',monospace;}
+  .mcp-grid{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:0;font-size:10px;}
+  .mcp-h{color:var(--t3);font-weight:600;text-transform:uppercase;font-size:7px;letter-spacing:.5px;padding:3px 5px;border-bottom:1px solid var(--bdr);text-align:right;} .mcp-h:first-child{text-align:left;}
+  .mcp-c{padding:3px 5px;border-bottom:1px solid rgba(30,41,59,.4);font-family:'JetBrains Mono',monospace;font-size:10px;text-align:right;color:var(--t2);} .mcp-c:first-child{text-align:left;font-family:'Outfit',sans-serif;font-weight:600;} .mcp-c.neg{color:var(--red);}
+  .map-tooltip{position:fixed;z-index:2000;pointer-events:none;background:rgba(10,14,23,0.94);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;backdrop-filter:blur(10px);font-family:'Outfit',sans-serif;font-size:11px;color:var(--t1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:none;}
+  .map-tooltip.show{display:block;}
+  .tt-name{font-size:13px;font-weight:700;margin-bottom:4px;}
+  .tt-row{display:flex;gap:12px;margin-top:2px;}
+  .tt-val{font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+  .leaflet-container{background:var(--bg);} .leaflet-control-zoom a{background:var(--card)!important;color:var(--t1)!important;border-color:var(--bdr)!important;} .leaflet-control-zoom a:hover{background:var(--bg2)!important;} .leaflet-control-attribution{background:rgba(15,20,32,0.7)!important;color:var(--t3)!important;font-size:7px!important;} .leaflet-control-attribution a{color:var(--t3)!important;}
+  .leaflet-popup-content-wrapper{background:rgba(15,20,32,0.95)!important;color:var(--t1)!important;border:1px solid var(--bdr)!important;border-radius:var(--r)!important;box-shadow:0 8px 32px rgba(0,0,0,0.5)!important;} .leaflet-popup-tip{background:rgba(15,20,32,0.95)!important;} .leaflet-popup-content{font-family:'Outfit',sans-serif!important;font-size:12px!important;margin:10px 14px!important;line-height:1.6!important;}
+  .zone-label{font-family:'Outfit',sans-serif;font-weight:700;font-size:12px;text-shadow:0 0 8px rgba(0,0,0,.9),0 0 16px rgba(0,0,0,.6);white-space:nowrap;letter-spacing:.5px;}
+  .hub-label{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:9px;text-shadow:0 0 6px rgba(0,0,0,.9);white-space:nowrap;background:rgba(15,20,32,.75);padding:2px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.1);}
+  
+  .nav-bar{display:flex;gap:0;background:var(--bg);border-bottom:1px solid var(--bdr);padding:0 20px;z-index:1001;position:relative;}
+  .nav-link{padding:8px 18px;font-size:11px;font-weight:600;color:var(--t3);text-decoration:none;border-bottom:2px solid transparent;font-family:'Outfit',sans-serif;transition:all .2s;white-space:nowrap;}
+  .nav-link:hover{color:var(--t2);}
+  .nav-link.active{color:var(--cyan);border-bottom-color:var(--cyan);}
+  ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:var(--bg2);}::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-icon">🗺️</div>
+  <div><h1>SPP Live Market Map</h1><p>Live RTBM + West/WEIS + DA + Transmission + Delta — All SPP Market Layers</p></div>
+  <div class="header-right">
+    <div class="status" id="status"><span class="dot loading"></span>Loading...</div>
+    <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="nav-bar">
+  <a class="nav-link" href="index.html">⚡ LMP Dashboard</a>
+  <a class="nav-link active" href="map.html">🗺️ Live Map</a>
+</div>
+<div class="map-tooltip" id="mapTooltip"></div>
+<div id="map"></div>
+
+<div class="legend">
+  <div class="leg-t">Feature Layers</div>
+  <label class="leg-i"><input type="checkbox" checked onchange="tgl('zones',this.checked)"><div class="leg-d" style="background:rgba(59,130,246,.3);border:2px solid #3b82f6;"></div>Reserve Zones</label>
+  <label class="leg-i"><input type="checkbox" checked onchange="tgl('hubs',this.checked)"><div class="leg-c" style="background:#fff;border-color:#fff;"></div>Hubs (RT + West)</label>
+  <label class="leg-i"><input type="checkbox" checked onchange="tgl('interfaces',this.checked)"><div class="leg-c" style="background:var(--cyan);border-color:var(--cyan);"></div>Interfaces (RT + West)</label>
+  <label class="leg-i"><input type="checkbox" checked onchange="tgl('constraints',this.checked)"><div class="leg-l" style="background:var(--red);"></div>Binding Constraints</label>
+  <div class="leg-t">Contour Overlays</div>
+  <label class="leg-i"><input type="checkbox" checked onchange="tio('rtbmLMP',this.checked)"><div class="leg-g" style="background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444);"></div>RT LMP Contour</label>
+  <label class="leg-i"><input type="checkbox" onchange="tio('westLMP',this.checked)"><div class="leg-g" style="background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444);"></div>West LMP Contour</label>
+  <label class="leg-i"><input type="checkbox" onchange="tio('daLMP',this.checked)"><div class="leg-g" style="background:linear-gradient(90deg,#6366f1,#a78bfa,#c084fc);"></div>DA LMP Contour</label>
+  <label class="leg-i"><input type="checkbox" onchange="tio('deltaLMP',this.checked)"><div class="leg-g" style="background:linear-gradient(90deg,#ef4444,#fbbf24,#10b981);"></div>Delta (RT − DA)</label>
+  <div class="leg-t">Transmission</div>
+  <label class="leg-i"><input type="checkbox" onchange="tio('transmission',this.checked)"><div class="leg-l" style="background:#4ade80;"></div>SPP Transmission (230kV+)</label>
+  <label class="leg-i"><input type="checkbox" onchange="tio('westTx',this.checked)"><div class="leg-l" style="background:#22d3ee;"></div>West Transmission</label>
+  <div class="leg-t">LMP Color Scale</div>
+  <div style="display:flex;gap:3px;margin-top:3px;"><div style="flex:1;height:8px;border-radius:2px;background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444);"></div></div>
+  <div style="display:flex;justify-content:space-between;font-size:7px;color:var(--t3);margin-top:1px;"><span>&lt;$0</span><span>$20</span><span>$40</span><span>$60+</span></div>
+</div>
+
+<div class="mcp-panel">
+  <div class="mcp-title"><span class="dot"></span>Live MCP by Reserve Zone</div>
+  <div class="mcp-time" id="mcpTime">Loading...</div>
+  <div class="mcp-grid" id="mcpGrid"></div>
+</div>
+
+<script>
+var PROXY='https://sppdataproxy.tymckinney2222.workers.dev';
+var BASE='https://pricecontourmap.spp.org/arcgis/rest/services/MarketMaps';
+var RTBM=BASE+'/RTBM_FeatureData/MapServer';
+var WEST=BASE+'/RTBM_FeatureData_West/MapServer';
+var ZC={'1':'#ef4444','2':'#10b981','3':'#3b82f6','4':'#f59e0b','5':'#8b5cf6'};
+
+function lc(v){if(v==null)return'#666';if(v<0)return'#3b82f6';if(v<15)return'#10b981';if(v<30)return'#84cc16';if(v<50)return'#f59e0b';if(v<80)return'#f97316';return'#ef4444';}
+function m2m(lat,lng){var x=lng*20037508.34/180;var y=Math.log(Math.tan((90+lat)*Math.PI/360))/(Math.PI/180);y=y*20037508.34/180;return[x,y];}
+
+var map=L.map('map',{center:[37.5,-98.5],zoom:5,zoomControl:true});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{attribution:'© CARTO © OSM',subdomains:'abcd',maxZoom:14,minZoom:4}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:14,opacity:0.35}).addTo(map);
+
+var layers={zones:L.layerGroup().addTo(map),hubs:L.layerGroup().addTo(map),interfaces:L.layerGroup().addTo(map),constraints:L.layerGroup().addTo(map),labels:L.layerGroup().addTo(map)};
+
+function tgl(n,s){if(s)map.addLayer(layers[n]);else map.removeLayer(layers[n]);}
+
+// Image overlays
+var iovs={};
+var ICFG={
+  rtbmLMP:{svc:'RTBM_LMP',b:[[28,-108],[50,-88]],op:0.5},
+  westLMP:{svc:'RTBM_LMP_WEST',b:[[38,-113],[44.5,-103]],op:0.55},
+  daLMP:{svc:'DA_LMP',b:[[28,-108],[50,-88]],op:0.45},
+  deltaLMP:{svc:'DELTA_LMP',b:[[28,-108],[50,-88]],op:0.5},
+  transmission:{svc:'SPP_Transmission_Markets',b:[[28,-108],[50,-88]],op:0.55},
+  westTx:{svc:'WestTransmissionMap',b:[[38,-113],[44.5,-103]],op:0.55},
+};
+
+function tio(n,s){if(!s){if(iovs[n]){map.removeLayer(iovs[n]);delete iovs[n];}return;}lio(n);}
+
+function lio(n){
+  var c=ICFG[n];if(!c)return;
+  if(iovs[n])map.removeLayer(iovs[n]);
+  var sw=m2m(c.b[0][0],c.b[0][1]),ne=m2m(c.b[1][0],c.b[1][1]);
+  var bbox=sw[0]+','+sw[1]+','+ne[0]+','+ne[1];
+  var sppUrl=BASE+'/'+c.svc+'/MapServer/export?bbox='+bbox+'&bboxSR=3857&imageSR=3857&size=2048,2048&format=png32&transparent=true&f=image&_ts='+Date.now();
+  var url=PROXY+'?url='+encodeURIComponent(sppUrl);
+  var bounds=L.latLngBounds(L.latLng(c.b[0][0],c.b[0][1]),L.latLng(c.b[1][0],c.b[1][1]));
+  iovs[n]=L.imageOverlay(url,bounds,{opacity:c.op,interactive:false}).addTo(map);
+}
+
+// Tooltip
+var tt=document.getElementById('mapTooltip');
+function stt(e,h){tt.innerHTML=h;tt.classList.add('show');ptt(e);}
+function htt(){tt.classList.remove('show');}
+function ptt(e){var x=(e.originalEvent||e).clientX||0,y=(e.originalEvent||e).clientY||0;var l=x+16,t=y+16;if(l+280>window.innerWidth)l=x-280;if(t+140>window.innerHeight)t=y-140;tt.style.left=l+'px';tt.style.top=t+'px';}
+map.on('mousemove',function(e){if(tt.classList.contains('show'))ptt(e);});
+
+// Query
+function qurl(base,layer,p){var d={where:'1=1',outFields:'*',f:'geojson',outSR:'4326'};if(p)for(var k in p)d[k]=p[k];var qs=Object.keys(d).map(function(k){return k+'='+encodeURIComponent(d[k]);}).join('&');return PROXY+'?url='+encodeURIComponent(base+'/'+layer+'/query?'+qs);}
+async function fj(url){var r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+
+// Load all
+async function loadAll(){
+  document.getElementById('status').innerHTML='<span class="dot loading"></span>Loading...';
+  try{
+    var R=await Promise.allSettled([
+      fj(qurl(RTBM,5)),fj(qurl(RTBM,1)),fj(qurl(RTBM,2)),fj(qurl(RTBM,4)),fj(qurl(RTBM,3)),
+      fj(qurl(WEST,1)),fj(qurl(WEST,2))
+    ]);
+    for(var k in layers)layers[k].clearLayers();
+    if(R[0].status==='fulfilled')renderZones(R[0].value);
+    if(R[1].status==='fulfilled')renderPts(R[1].value,'hub','#fff',8);
+    if(R[2].status==='fulfilled')renderPts(R[2].value,'iface','#06b6d4',7);
+    if(R[3].status==='fulfilled')renderBC(R[3].value,'Binding');
+    if(R[4].status==='fulfilled')renderBC(R[4].value,'M2M');
+    if(R[5].status==='fulfilled')renderPts(R[5].value,'hub-west','#22d3ee',8);
+    if(R[6].status==='fulfilled')renderPts(R[6].value,'iface-west','#a78bfa',7);
+    lio('rtbmLMP');
+    document.getElementById('status').innerHTML='<span class="dot live"></span>Live — '+new Date().toLocaleTimeString();
+  }catch(e){
+    console.error(e);
+    document.getElementById('status').innerHTML='<span class="dot error"></span>Error: '+e.message;
+  }
+}
+
+function renderZones(data){
+  if(!data||!data.features)return;
+  var gh='<div class="mcp-h">Zone</div><div class="mcp-h">Reg Up</div><div class="mcp-h">Reg Dn</div><div class="mcp-h">Spin</div><div class="mcp-h">Supp</div>';
+  var rows='',ts='';
+  data.features.forEach(function(f){
+    var p=f.properties,zid=String(p.Zone_Number||'').trim(),col=ZC[zid]||'#666';
+    var ru=p.REGUP_MCP,rd=p.REGDN_MCP,sp=p.SPIN_MCP,su=p.SUPP_MCP;
+    if(p.INTERVAL)ts=new Date(p.INTERVAL).toLocaleString();
+    if(f.geometry&&f.geometry.coordinates){
+      var ly=L.geoJSON(f,{style:{color:col,weight:2,fillColor:col,fillOpacity:0.1,dashArray:'6,4'}});
+      ly.bindPopup('<div style="min-width:200px"><div style="font-size:15px;font-weight:700;color:'+col+'">Reserve Zone '+zid+'</div><div style="font-size:10px;color:#94a3b8;margin:4px 0 8px">'+ts+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div style="background:#111827;border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:8px;color:#64748b">REG UP</div><div style="font-size:14px;font-weight:700;color:#3b82f6;font-family:JetBrains Mono,monospace">$'+(ru||0).toFixed(2)+'</div></div><div style="background:#111827;border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:8px;color:#64748b">REG DN</div><div style="font-size:14px;font-weight:700;color:#10b981;font-family:JetBrains Mono,monospace">$'+(rd||0).toFixed(2)+'</div></div><div style="background:#111827;border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:8px;color:#64748b">SPIN</div><div style="font-size:14px;font-weight:700;color:#06b6d4;font-family:JetBrains Mono,monospace">$'+(sp||0).toFixed(2)+'</div></div><div style="background:#111827;border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:8px;color:#64748b">SUPP</div><div style="font-size:14px;font-weight:700;color:#8b5cf6;font-family:JetBrains Mono,monospace">$'+(su||0).toFixed(2)+'</div></div></div></div>');
+      ly.on('mouseover',function(e){this.setStyle({fillOpacity:0.25,weight:3});stt(e,'<div class="tt-name" style="color:'+col+'">Reserve Zone '+zid+'</div><div class="tt-row"><div style="text-align:center"><div style="font-size:7px;text-transform:uppercase;letter-spacing:.8px;color:#64748b">Reg Up</div><div class="tt-val" style="color:#3b82f6">$'+(ru||0).toFixed(2)+'</div></div><div style="text-align:center"><div style="font-size:7px;text-transform:uppercase;letter-spacing:.8px;color:#64748b">Reg Dn</div><div class="tt-val" style="color:#10b981">$'+(rd||0).toFixed(2)+'</div></div><div style="text-align:center"><div style="font-size:7px;text-transform:uppercase;letter-spacing:.8px;color:#64748b">Spin</div><div class="tt-val" style="color:#06b6d4">$'+(sp||0).toFixed(2)+'</div></div><div style="text-align:center"><div style="font-size:7px;text-transform:uppercase;letter-spacing:.8px;color:#64748b">Supp</div><div class="tt-val" style="color:#8b5cf6">$'+(su||0).toFixed(2)+'</div></div></div>');});
+      ly.on('mouseout',function(){this.setStyle({fillOpacity:0.1,weight:2});htt();});
+      ly.on('mousemove',function(e){ptt(e);});
+      layers.zones.addLayer(ly);
+      var ctr=ly.getBounds().getCenter();
+      layers.labels.addLayer(L.marker(ctr,{icon:L.divIcon({className:'zone-label',html:'<span style="color:'+col+'">RZ '+zid+'</span>',iconSize:[50,16],iconAnchor:[25,8]}),interactive:false}));
+    }
+    var fm=function(v){return v!=null?'$'+v.toFixed(2):'—';};
+    var cl=function(v){return v!=null&&v<0?' neg':'';};
+    rows+='<div class="mcp-c" style="color:'+col+';font-weight:700">RZ '+zid+'</div><div class="mcp-c'+cl(ru)+'">'+fm(ru)+'</div><div class="mcp-c'+cl(rd)+'">'+fm(rd)+'</div><div class="mcp-c'+cl(sp)+'">'+fm(sp)+'</div><div class="mcp-c'+cl(su)+'">'+fm(su)+'</div>';
+  });
+  document.getElementById('mcpGrid').innerHTML=gh+rows;
+  document.getElementById('mcpTime').textContent=ts||'Unknown';
+}
+
+function renderPts(data,type,mc,rad){
+  if(!data||!data.features)return;
+  var isW=type.indexOf('west')>-1,isH=type.indexOf('hub')>-1;
+  var lg=isH?layers.hubs:layers.interfaces;
+  var tag=isW?' (West)':'',icon=isH?'⬡':'↔';
+  data.features.forEach(function(f){
+    if(!f.geometry||f.geometry.type!=='Point')return;
+    var p=f.properties,co=f.geometry.coordinates;
+    var nm=p.AGGPnodes_PARENT_NAME||p.Name||p.SETTLEMENT_LOCATION||type;
+    var lmp=p.LMP;
+    var mk=L.circleMarker([co[1],co[0]],{radius:rad,color:mc,weight:isH?2.5:2,fillColor:lmp!=null?lc(lmp):mc,fillOpacity:0.85});
+    mk.bindPopup('<div><div style="font-size:14px;font-weight:700;color:'+mc+'">'+icon+' '+nm+tag+'</div>'+(lmp!=null?'<div style="font-size:18px;font-weight:700;color:'+lc(lmp)+';font-family:JetBrains Mono,monospace">LMP: $'+lmp.toFixed(2)+'</div>':'')+'</div>');
+    mk.on('mouseover',function(e){stt(e,'<div class="tt-name" style="color:'+mc+'">'+icon+' '+nm+tag+'</div>'+(lmp!=null?'<div class="tt-val" style="color:'+lc(lmp)+'">LMP: $'+lmp.toFixed(2)+'</div>':''));});
+    mk.on('mouseout',htt);mk.on('mousemove',function(e){ptt(e);});
+    lg.addLayer(mk);
+    if(isH){layers.labels.addLayer(L.marker([co[1]+0.2,co[0]],{icon:L.divIcon({className:'hub-label',html:'<span style="color:'+mc+'">'+icon+' '+nm+(lmp!=null?' $'+lmp.toFixed(2):'')+'</span>',iconSize:[180,16],iconAnchor:[90,8]}),interactive:false}));}
+  });
+}
+
+function renderBC(data,type){
+  if(!data||!data.features)return;
+  data.features.forEach(function(f){
+    var p=f.properties,nm=p.CONSTRAINTNAME||p.Name||type,sh=p.SHADOWPRICE;
+    if(!f.geometry)return;
+    try{
+      var ly=L.geoJSON(f,{style:{color:sh&&sh<0?'#ef4444':'#f59e0b',weight:3,opacity:0.8,dashArray:'8,4'},pointToLayer:function(_,ll){return L.circleMarker(ll,{radius:4,color:'#f59e0b',fillColor:'#f59e0b',fillOpacity:0.8,weight:1});}});
+      ly.bindPopup('<div><div style="font-size:12px;font-weight:700;color:#f59e0b">'+nm+'</div><div style="font-size:10px;color:#64748b">'+type+'</div>'+(sh!=null?'<div style="font-size:14px;font-weight:700;color:'+(sh<0?'#ef4444':'#f59e0b')+';font-family:JetBrains Mono,monospace">Shadow: $'+sh.toFixed(2)+'</div>':'')+'</div>');
+      ly.on('mouseover',function(e){stt(e,'<div class="tt-name" style="color:#f59e0b">⚡ '+nm+'</div><div style="font-size:9px;color:#64748b">'+type+'</div>'+(sh!=null?'<div class="tt-val" style="color:'+(sh<0?'#ef4444':'#f59e0b')+'">Shadow: $'+sh.toFixed(2)+'</div>':''));});
+      ly.on('mouseout',htt);ly.on('mousemove',function(e){ptt(e);});
+      layers.constraints.addLayer(ly);
+    }catch(e){}
+  });
+}
+
+
+// ─── CLICK TO IDENTIFY LMP ───
+map.on('click', async function(e) {
+  var lat = e.latlng.lat, lng = e.latlng.lng;
+  var pt = m2m(lat, lng);
+  var mb = map.getBounds();
+  var sw = m2m(mb.getSouth(), mb.getWest());
+  var ne = m2m(mb.getNorth(), mb.getEast());
+  var sz = map.getSize();
+  var me = sw[0]+','+sw[1]+','+ne[0]+','+ne[1];
+  var id = sz.x+','+sz.y+',96';
+
+  var popup = L.popup().setLatLng(e.latlng)
+    .setContent('<div style="text-align:center;padding:8px;min-width:180px;"><div style="color:#06b6d4;font-size:11px;">Querying SPP...</div><div style="color:#64748b;font-size:9px;margin-top:4px;">'+lat.toFixed(4)+', '+lng.toFixed(4)+'</div></div>')
+    .openOn(map);
+
+  var html = '<div style="min-width:220px;max-width:300px;">';
+  html += '<div style="font-size:9px;color:#64748b;margin-bottom:8px;">📍 '+lat.toFixed(4)+', '+lng.toFixed(4)+'</div>';
+
+  // Query both services
+  var urls = [
+    {name:'RT LMP', url: BASE+'/RTBM_LMP/MapServer/identify?geometry='+pt[0]+','+pt[1]+'&geometryType=esriGeometryPoint&sr=3857&layers=all&tolerance=10&mapExtent='+me+'&imageDisplay='+id+'&returnGeometry=false&f=json'},
+    {name:'Features', url: BASE+'/RTBM_FeatureData/MapServer/identify?geometry='+pt[0]+','+pt[1]+'&geometryType=esriGeometryPoint&sr=3857&layers=all&tolerance=15&mapExtent='+me+'&imageDisplay='+id+'&returnGeometry=false&f=json'},
+  ];
+
+  // Add West if in western area
+  if (lng < -103 && lat > 38 && lat < 45) {
+    urls.push({name:'West LMP', url: BASE+'/RTBM_LMP_WEST/MapServer/identify?geometry='+pt[0]+','+pt[1]+'&geometryType=esriGeometryPoint&sr=3857&layers=all&tolerance=10&mapExtent='+me+'&imageDisplay='+id+'&returnGeometry=false&f=json'});
+  }
+
+  var foundAnything = false;
+
+  for (var i = 0; i < urls.length; i++) {
+    try {
+      var proxyUrl = PROXY + '?url=' + encodeURIComponent(urls[i].url);
+      var resp = await fetch(proxyUrl);
+      var data = await resp.json();
+
+      if (data && data.results && data.results.length > 0) {
+        data.results.forEach(function(r) {
+          var a = r.attributes || {};
+          var ln = r.layerName || r.layerId || '';
+
+          // Zone data
+          if (a.REGUP_MCP != null || a.RESERVE_ZONE || a.Zone_Number) {
+            foundAnything = true;
+            var zid = a.Zone_Number || a.RESERVE_ZONE || '?';
+            var col = ZC[String(zid)] || '#94a3b8';
+            html += '<div style="background:#111827;border-radius:6px;padding:8px;margin-bottom:6px;">';
+            html += '<div style="font-size:12px;font-weight:700;color:'+col+';">Reserve Zone '+zid+'</div>';
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;font-size:10px;">';
+            html += '<div>Reg Up: <b style="color:#3b82f6;font-family:JetBrains Mono,monospace;">$'+(a.REGUP_MCP||0).toFixed(2)+'</b></div>';
+            html += '<div>Reg Dn: <b style="color:#10b981;font-family:JetBrains Mono,monospace;">$'+(a.REGDN_MCP||0).toFixed(2)+'</b></div>';
+            html += '<div>Spin: <b style="color:#06b6d4;font-family:JetBrains Mono,monospace;">$'+(a.SPIN_MCP||0).toFixed(2)+'</b></div>';
+            html += '<div>Supp: <b style="color:#8b5cf6;font-family:JetBrains Mono,monospace;">$'+(a.SUPP_MCP||0).toFixed(2)+'</b></div>';
+            html += '</div></div>';
+          }
+
+          // Hub/Interface
+          if (a.LMP != null && (a.AGGPnodes_PARENT_NAME || a.SETTLEMENT_LOCATION)) {
+            foundAnything = true;
+            var nm = a.AGGPnodes_PARENT_NAME || a.SETTLEMENT_LOCATION || ln;
+            html += '<div style="margin-bottom:6px;">';
+            html += '<div style="font-size:11px;font-weight:600;color:#06b6d4;">'+(String(ln).indexOf('Hub')>-1?'⬡':'↔')+' '+nm+'</div>';
+            html += '<div style="font-size:16px;font-weight:700;color:'+lc(a.LMP)+';font-family:JetBrains Mono,monospace;">LMP: $'+a.LMP.toFixed(2)+'</div>';
+            if (a.MEC != null) html += '<div style="font-size:9px;color:#94a3b8;">MEC: $'+a.MEC.toFixed(2)+' | MCC: $'+(a.MCC||0).toFixed(2)+' | MLC: $'+(a.MLC||0).toFixed(2)+'</div>';
+            html += '</div>';
+          }
+
+          // Constraints
+          if (a.CONSTRAINTNAME) {
+            foundAnything = true;
+            html += '<div style="margin-bottom:6px;">';
+            html += '<div style="font-size:10px;font-weight:600;color:#f59e0b;">⚡ '+a.CONSTRAINTNAME+'</div>';
+            if (a.SHADOWPRICE != null) html += '<div style="font-size:12px;font-weight:700;color:'+(a.SHADOWPRICE<0?'#ef4444':'#f59e0b')+';font-family:JetBrains Mono,monospace;">Shadow: $'+a.SHADOWPRICE.toFixed(2)+'</div>';
+            html += '</div>';
+          }
+
+          // Contour pixel value — try all common field names
+          var pixelKeys = ['Pixel Value','pixel_value','Class','Value','Stretched value','GRAY_INDEX','LMP','gridcode'];
+          for (var ki = 0; ki < pixelKeys.length; ki++) {
+            if (a[pixelKeys[ki]] != null && a[pixelKeys[ki]] !== '' && a[pixelKeys[ki]] !== 'NoData') {
+              var pv = parseFloat(a[pixelKeys[ki]]);
+              if (!isNaN(pv)) {
+                foundAnything = true;
+                var label = urls[i].name;
+                html += '<div style="margin-bottom:6px;">';
+                html += '<div style="font-size:9px;color:#64748b;text-transform:uppercase;">'+label+'</div>';
+                html += '<div style="font-size:22px;font-weight:700;color:'+lc(pv)+';font-family:JetBrains Mono,monospace;">$'+pv.toFixed(2)+'</div>';
+                html += '</div>';
+                break;
+              }
+            }
+          }
+
+          // If nothing matched above, dump all numeric attributes as debug
+          if (!foundAnything && Object.keys(a).length > 0) {
+            var nums = [];
+            for (var ak in a) {
+              var av = parseFloat(a[ak]);
+              if (!isNaN(av) && ak !== 'OBJECTID' && ak !== 'Shape_Length' && ak !== 'Shape_Area') {
+                nums.push(ak + ': ' + av.toFixed(2));
+              }
+            }
+            if (nums.length > 0) {
+              foundAnything = true;
+              html += '<div style="margin-bottom:6px;background:#111827;border-radius:4px;padding:6px;">';
+              html += '<div style="font-size:9px;color:#64748b;">'+urls[i].name+' — '+(ln||'Layer')+'</div>';
+              html += '<div style="font-size:10px;color:#94a3b8;font-family:JetBrains Mono,monospace;margin-top:3px;">'+nums.join('<br>')+'</div>';
+              html += '</div>';
+            }
+          }
+        });
+      }
+    } catch(err) {
+      html += '<div style="font-size:9px;color:#ef4444;">'+urls[i].name+': '+err.message+'</div>';
+    }
+  }
+
+  if (!foundAnything) {
+    html += '<div style="color:#64748b;font-size:11px;">No data found at this location.<br>Try clicking inside an SPP zone.</div>';
+  }
+
+  html += '</div>';
+  popup.setContent(html);
+});
+
+
+setInterval(function(){loadAll();for(var k in iovs)lio(k);},300000);
+loadAll();
+</script>
+</body>
+</html>
