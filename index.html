@@ -27962,6 +27962,54 @@ function scheduleMidnightReset() {
   dbLog('WH: cache initialized for ' + whDateStr(), 'ok');
 })();
 
+// ── STORAGE JANITOR ───────────────────────────────────────────────────────────
+// GameDay and this dashboard share tymckinney2222.github.io's single ~10 MB
+// localStorage quota. The MCP history cleaner (mcpCacheClean, 7-day keep)
+// previously only ran inside the LMP×MCP fetch flows, so weeks of 87 KB/day
+// mcpRtHist_v1_* keys could sit parked whenever that tab wasn't used —
+// squeezing the OTHER apps on the origin. This janitor runs every cleaner at
+// boot, once per day, a few seconds after load so startup stays snappy.
+var SPP_JANITOR_STAMP = 'sppJanitorLast_v1';
+function sppStorageJanitor(){
+  try{
+    var n = new Date();
+    var stamp = n.getFullYear() + String(n.getMonth()+1).padStart(2,'0') + String(n.getDate()).padStart(2,'0');
+    if(localStorage.getItem(SPP_JANITOR_STAMP) === stamp) return;
+
+    var before = 0;
+    try{ for(var b=0;b<localStorage.length;b++){ var bk=localStorage.key(b); before += ((bk||'').length + (localStorage.getItem(bk)||'').length) * 2; } }catch(e){}
+
+    try{ mcpCacheClean(); }catch(e){}      // MCP DA/RT day-caches → last 7 CT days
+    try{ whCleanOldKeys(); }catch(e){}     // watch history + DA history → last 7 days
+    try{ projTrackPrune(); }catch(e){}     // projection tracker entries → last 14 days
+    // DAE forecast schedules: date-suffixed, consumed ones are removed by the
+    // settlement flow but unconsumed days linger — keep the last 7.
+    try{
+      var cut = new Date(); cut.setDate(cut.getDate() - 7);
+      var cutStr = cut.getFullYear() + String(cut.getMonth()+1).padStart(2,'0') + String(cut.getDate()).padStart(2,'0');
+      var del = [];
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        if(!k || k.indexOf(DAE_SCHED_PREFIX) !== 0) continue;
+        var tail = k.slice(DAE_SCHED_PREFIX.length).replace(/-/g,'');
+        if(/^\d{8}/.test(tail) && tail.slice(0,8) < cutStr) del.push(k);
+      }
+      del.forEach(function(dk){ localStorage.removeItem(dk); });
+    }catch(e){}
+
+    var after = 0;
+    try{ for(var a=0;a<localStorage.length;a++){ var ak=localStorage.key(a); after += ((ak||'').length + (localStorage.getItem(ak)||'').length) * 2; } }catch(e){}
+
+    localStorage.setItem(SPP_JANITOR_STAMP, stamp);
+    var freedKb = Math.max(0, Math.round((before - after) / 1024));
+    dbLog('Janitor: daily storage prune done' + (freedKb ? ' — freed ~' + freedKb + ' KB' : ' — nothing to prune') +
+          ' (origin shared with GameDay)', freedKb ? 'ok' : 'info');
+  }catch(e){
+    try{ dbLog('Janitor error: ' + e.message, 'warn'); }catch(e2){}
+  }
+}
+document.addEventListener('DOMContentLoaded', function(){ setTimeout(sppStorageJanitor, 3000); });
+
 // ════════════════════════════════════════════════════════════════════════════
 // 💲 DA ENERGY SETTLEMENT  — v6
 // Renewables (left col) ▼ Under | Load (right col) ▲ Over
